@@ -1,0 +1,27 @@
+{
+  "source": "avto.pro",
+  "sourceUrl": "https://avto.pro/makers/",
+  "generatedAt": "2026-07-12",
+  "entries": [
+    {
+      "displayName": "Bcguma",
+      "key": "bcguma",
+      "avtoProUrl": "https://avto.pro/makers/bcguma/",
+      "rawCountry": "Украина",
+      "country": "Україна",
+      "foundedYear": "1998",
+      "descriptionNote": "Avto.pro describes BCGUMA as a Ukrainian trademark with rubber technical products from factories in Bila Tserkva, focused on the secondary market and budget-constrained buyers.",
+      "confidence": "medium"
+    },
+    {
+      "displayName": "CTR",
+      "key": "ctr",
+      "avtoProUrl": "https://avto.pro/makers/ctr/",
+      "rawCountry": "Южная Корея",
+      "country": "Південна Корея",
+      "foundedYear": "1960",
+      "descriptionNote": "Avto.pro describes CTR as a Korean suspension and steering parts maker with conveyor supplies to Hyundai/Kia and a price segment between budget analogs and original parts.",
+      "confidence": "medium"
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+name: Build installers and publish releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: formatter-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS installers
+    runs-on: macos-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/release-assets.mjs --check-version
+      - run: npm run test
+      - run: npm run smoke:electron
+      - run: npm run dist:mac
+      - run: node scripts/release-assets.mjs --platform mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Formatter-${{ github.ref_name }}-macOS
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.blockmap
+            release/latest-mac.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    env:
+      CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/release-assets.mjs --check-version
+      - run: npm run test
+      - run: npm run smoke:electron
+      - run: npm run dist:win
+      - run: node scripts/release-assets.mjs --platform win
+      - name: Smoke-test the installed Windows application
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release/Formatter-*-win-x64.exe | Select-Object -First 1
+          $installDir = Join-Path $env:RUNNER_TEMP "Formatter-install"
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "NSIS installation failed: $($install.ExitCode)" }
+          $stdoutPath = Join-Path $env:RUNNER_TEMP "Formatter-smoke.out"
+          $stderrPath = Join-Path $env:RUNNER_TEMP "Formatter-smoke.err"
+          $smoke = Start-Process -FilePath (Join-Path $installDir "Formatter.exe") -ArgumentList "--smoke-test" -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -Wait -PassThru
+          Get-Content $stdoutPath
+          Get-Content $stderrPath
+          if ($smoke.ExitCode -ne 0 -or -not (Select-String -Path $stdoutPath -Pattern "ELECTRON_SMOKE_PASSED" -Quiet)) {
+            throw "Installed Windows smoke test failed: $($smoke.ExitCode)"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Formatter-${{ github.ref_name }}-Windows
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish complete GitHub release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+          pattern: Formatter-*
+      - run: node scripts/release-assets.mjs --check-version
+      - run: node scripts/release-assets.mjs release
+      - name: Prepare release notes
+        run: node scripts/release-assets.mjs --notes "$GITHUB_REF_NAME" release-notes.md
+      - name: Upload all assets to a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" --verify-tag --draft
+          --title "Formatter $GITHUB_REF_NAME" --notes-file release-notes.md
+          release/*.dmg release/*.zip release/*.exe release/*.blockmap release/latest*.yml
+      - name: Make the complete release available to the updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest

@@ -1,0 +1,56 @@
+{
+  "name": "product-price-formatter",
+  "productName": "Formatter",
+  "version": "0.3.0",
+  "description": "Desktop formatter for copied Ukrainian product price lists.",
+  "author": "dw",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuriySemerey/Formatter.git"
+  },
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "engines": {
+    "node": ">=22.12 <25"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "electron:dev": "concurrently -k \"vite --host 127.0.0.1\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron .\"",
+    "icons": "node scripts/generate-app-icons.mjs",
+    "setup:release": "npm install --package-lock-only --ignore-scripts && npm ci && npm run test && npm run preflight",
+    "build": "tsc && vite build && tsc -p tsconfig.electron.json",
+    "smoke:electron": "npm run build && electron . --smoke-test",
+    "preflight": "npm run build && node scripts/release-preflight.mjs",
+    "pack": "npm run preflight && electron-builder --dir --publish never",
+    "dist:mac": "npm run preflight && electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "dist:win": "npm run preflight && electron-builder --win nsis --x64 --publish never",
+    "ci:verify": "npm run test && npm run smoke:electron && npm run preflight",
+    "sync:avto-pro-makers": "node scripts/sync-avto-pro-makers.mjs",
+    "test": "vitest run",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "dependencies": {
+    "electron-updater": "6.6.2",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^24.8.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.4",
+    "concurrently": "^9.1.0",
+    "cross-env": "^10.0.0",
+    "electron": "^39.2.4",
+    "electron-builder": "26.0.12",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.8.3",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4",
+    "wait-on": "^8.0.1"
+  }
+}

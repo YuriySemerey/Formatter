@@ -1,0 +1,67 @@
+appId: com.dw.formatter
+productName: Formatter
+copyright: "Copyright © 2026 dw"
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+asar: true
+forceCodeSigning: false
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+afterSign: scripts/notarize-macos.cjs
+
+publish:
+  provider: github
+  owner: YuriySemerey
+  repo: Formatter
+  releaseType: release
+
+mac:
+  identity: null
+  category: public.app-category.productivity
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+dmg:
+  sign: false
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Formatter
+  deleteAppDataOnUninstall: false
