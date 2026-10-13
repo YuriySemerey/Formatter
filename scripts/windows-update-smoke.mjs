@@ -16,6 +16,7 @@ const root = process.cwd();
 const current = JSON.parse(await readFile("package.json", "utf8"));
 const temp = await mkdtemp(path.join(os.tmpdir(), "Formatter-update-"));
 const staging = path.join(temp, "electron");
+const harness = path.join(temp, "harness");
 const baselineOutput = path.join(temp, "baseline");
 const installDir = path.join(temp, "installed");
 const reportPath = path.join(temp, "report.json");
@@ -90,6 +91,8 @@ let updatedProcess;
 let renderer;
 try {
   await mkdir(staging, { recursive: true });
+  await mkdir(harness, { recursive: true });
+  await cp(path.join(root, "scripts/windows-update-test-main.cjs"), path.join(harness, "update-test-main.cjs"));
   await cp(path.join(root, "dist-electron"), staging, { recursive: true });
   const servicePath = path.join(staging, "updateService.js");
   let service = await readFile(servicePath, "utf8");
@@ -120,7 +123,7 @@ try {
       ...config,
       directories: { ...config.directories, output: baselineOutput },
       extraMetadata: { version: "0.2.99", main: "update-test-main.cjs" },
-      files: ["dist/**/*", "package.json", { from: staging, to: "dist-electron" }, { from: path.join(root, "scripts/windows-update-test-main.cjs"), to: "update-test-main.cjs" }]
+      files: ["dist/**/*", "package.json", { from: staging, to: "dist-electron" }, { from: harness, to: "." }]
     }
   });
   await install(path.join(baselineOutput, "Formatter-0.2.99-win-x64.exe"));
