@@ -15,6 +15,7 @@ files:
   - package.json
 
 afterSign: scripts/notarize-macos.cjs
+beforeBuild: scripts/prepare-nsis.cjs
 
 publish:
   provider: github

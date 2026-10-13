@@ -13,6 +13,7 @@ const requiredFiles = [
   "scripts/release-assets.mjs",
   "scripts/windows-update-smoke.mjs",
   "scripts/windows-update-test-main.cjs",
+  "scripts/prepare-nsis.cjs",
   "electron-builder.yml",
   ".github/workflows/build-installers.yml",
   "CHANGELOG.md"
@@ -106,6 +107,7 @@ if (!/^appId:\s+com\.dw\.formatter\s*$/mu.test(builderConfig) || !/^productName:
   fail("appId and productName must remain stable for offline upgrades");
 }
 const config = load(builderConfig);
+if (config.beforeBuild !== "scripts/prepare-nsis.cjs") fail("Windows builds must apply the reviewed NSIS bounded-copy backport");
 if (config.publish?.provider !== "github" || config.publish.owner !== "YuriySemerey" || config.publish.repo !== "Formatter" || config.publish.releaseType !== "release") {
   fail("GitHub update provider must target YuriySemerey/Formatter stable releases");
 }
