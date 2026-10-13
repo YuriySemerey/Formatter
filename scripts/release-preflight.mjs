@@ -123,7 +123,7 @@ const publish = workflow.jobs?.publish;
 if (!buildWorkflow.includes("npm run smoke:electron") || !publish?.needs?.includes("macos") || !publish.needs.includes("windows")) {
   fail("release publication must wait for verified macOS and Windows builds");
 }
-if (!publish.if?.includes("startsWith(github.ref, 'refs/tags/v')") || !publish.if.includes("github.event_name == 'push'") || publish.permissions?.contents !== "write" || workflow.on?.push?.branches) {
+if (!publish.if?.includes("startsWith(github.ref, 'refs/tags/v')") || !publish.if.includes("github.event_name == 'push'") || publish.permissions?.contents !== "write") {
   fail("only a version tag may publish a release; ordinary pushes must not publish");
 }
 if (!buildWorkflow.includes("release-assets.mjs release") || !buildWorkflow.includes("--draft") || !buildWorkflow.includes("--draft=false --latest")) {

@@ -40,7 +40,7 @@ function report(value) { fs.writeFileSync(reportPath, JSON.stringify(value, null
   assert.equal(saved.settings.showBrandCategory, true);
   assert.equal(saved.history[0].output, "Saved before update");
   assert.equal(saved.brands[0].country, "Test country");
-  await evaluate("window.updateTestStates=[]; window.formatterApp.onUpdateState(state=>window.updateTestStates.push(state.status));");
+  await evaluate("window.updateTestStates=[]; window.formatterApp.onUpdateState(state=>window.updateTestStates.push(state.status)); void 0;");
   const checked = await evaluate("window.formatterApp.checkForUpdates()");
   assert.equal(checked.status, "available");
   assert.equal(checked.availableVersion, process.env.FORMATTER_UPDATE_TEST_TARGET_VERSION);

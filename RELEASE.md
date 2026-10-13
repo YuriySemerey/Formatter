@@ -29,7 +29,7 @@ The Windows job also builds a temporary 0.2.99 installer and exercises the real 
 
 `beforeBuild` applies a narrowly checked NSIS template backport from [electron-builder #9769](https://github.com/electron-userland/electron-builder/pull/9769). This fixes a per-user install path buffer over-read that can crash setup with `0xC0000005`. The agreed electron-builder 26.0.12 and electron-updater 6.6.2 pins remain unchanged. The original dependency template is preserved in an ignored backup, repeated Windows builds are supported, and an unrecognized template fails the build instead of applying an unchecked patch.
 
-A manual workflow run builds downloadable Actions artifacts without publishing. Local commands also never publish. Use a fresh version-specific output directory to keep older local applications:
+Pushes to `main` automatically run the same build verification and produce Actions artifacts; their publication job is skipped. A manual workflow run also builds downloadable Actions artifacts without publishing. Only a version tag can publish a release. Local commands never publish. Use a fresh version-specific output directory to keep older local applications:
 
 ```bash
 npm run dist:mac -- --config.directories.output=release/0.3.0
