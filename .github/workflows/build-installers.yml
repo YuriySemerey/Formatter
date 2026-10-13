@@ -47,6 +47,7 @@ jobs:
   windows:
     name: Windows installer
     runs-on: windows-latest
+    timeout-minutes: 20
     env:
       CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
@@ -79,6 +80,14 @@ jobs:
           if ($smoke.ExitCode -ne 0 -or -not (Select-String -Path $stdoutPath -Pattern "ELECTRON_SMOKE_PASSED" -Quiet)) {
             throw "Installed Windows smoke test failed: $($smoke.ExitCode)"
           }
+      - name: Verify a native Windows update and saved data
+        run: node scripts/windows-update-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Windows-update-test-report
+          path: artifacts/windows-update-test.json
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: Formatter-${{ github.ref_name }}-Windows

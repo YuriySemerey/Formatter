@@ -25,6 +25,8 @@ The `Build installers and publish releases` workflow creates:
 
 Publication waits for both platform jobs. Windows additionally installs the NSIS EXE and runs the installed application smoke test. It verifies every expected installer, the two Mac ZIP architectures, version metadata, file sizes and SHA-512 checksums. Files are uploaded to a draft release, then the fully uploaded draft becomes the latest stable release. A failure leaves the previous release current; an incomplete draft is not offered by the updater.
 
+The Windows job also builds a temporary 0.2.99 installer and exercises the real update service and preload IPC against a loopback update feed. It verifies explicit downloading, progress, native NSIS replacement with the current production installer, and settings/history/brand edits in the restarted production renderer. CI uses silent installation to automate the installer wizard; production continues to use the user-confirmed installation flow. The feed override and test bootstrap exist only in the temporary installer. The JSON evidence is saved as a separate `Windows-update-test-report` Actions artifact and is excluded from public release assets.
+
 A manual workflow run builds downloadable Actions artifacts without publishing. Local commands also never publish. Use a fresh version-specific output directory to keep older local applications:
 
 ```bash

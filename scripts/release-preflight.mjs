@@ -11,6 +11,8 @@ const requiredFiles = [
   "dist-electron/preload.cjs",
   "dist-electron/updateService.js",
   "scripts/release-assets.mjs",
+  "scripts/windows-update-smoke.mjs",
+  "scripts/windows-update-test-main.cjs",
   "electron-builder.yml",
   ".github/workflows/build-installers.yml",
   "CHANGELOG.md"
@@ -124,6 +126,9 @@ if (!publish.if?.includes("startsWith(github.ref, 'refs/tags/v')") || !publish.i
 }
 if (!buildWorkflow.includes("release-assets.mjs release") || !buildWorkflow.includes("--draft") || !buildWorkflow.includes("--draft=false --latest")) {
   fail("workflow must validate complete assets and publish a fully uploaded draft");
+}
+if (!buildWorkflow.includes("node scripts/windows-update-smoke.mjs")) {
+  fail("Windows CI must verify a native update and persistence between installed versions");
 }
 const compiledUpdates = await readFile(path.join(root, "dist-electron/updateService.js"), "utf8");
 if (!compiledUpdates.includes("YuriySemerey/Formatter") || !compiledUpdates.includes("autoDownload = false") || !compiledUpdates.includes("autoInstallOnAppQuit = false")) {
