@@ -116,16 +116,24 @@ try {
   service = "import * as testFs from 'node:fs';\n" + service;
   await writeFile(servicePath, service);
   const config = load(await readFile("electron-builder.yml", "utf8"));
+  // An explicit config file avoids merging the production file globs with the
+  // staged test files, which would package the original update service twice.
+  const testConfigPath = path.join(temp, "test-builder.json");
+  await writeFile(testConfigPath, JSON.stringify({
+    ...config,
+    directories: { ...config.directories, output: baselineOutput },
+    extraMetadata: { version: "0.2.99", main: "update-test-main.cjs" },
+    publish: { provider: "generic", url: feed },
+    files: ["dist/**/*", "package.json", { from: staging, to: "dist-electron" }, { from: harness, to: "." }]
+  }, null, 2));
   await build({
     targets: Platform.WINDOWS.createTarget("nsis", Arch.x64),
     publish: "never",
-    config: {
-      ...config,
-      directories: { ...config.directories, output: baselineOutput },
-      extraMetadata: { version: "0.2.99", main: "update-test-main.cjs" },
-      files: ["dist/**/*", "package.json", { from: staging, to: "dist-electron" }, { from: harness, to: "." }]
-    }
+    config: testConfigPath
   });
+  const testArchive = path.join(baselineOutput, "win-unpacked/resources/app.asar");
+  const packagedService = extractFile(testArchive, "dist-electron/updateService.js").toString();
+  assert(packagedService.includes(feed) && packagedService.includes("originalInstall(true,false)"), "The temporary installer must contain the test feed and installer automation");
   await install(path.join(baselineOutput, "Formatter-0.2.99-win-x64.exe"));
   const executable = path.join(installDir, "Formatter.exe");
   const env = { ...process.env, FORMATTER_UPDATE_TEST_REPORT: reportPath, FORMATTER_UPDATE_TEST_INSTALL_DIR: installDir, FORMATTER_UPDATE_TEST_TARGET_VERSION: current.version };
