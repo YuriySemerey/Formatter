@@ -2,7 +2,7 @@
 
 All notable changes to Formatter are documented here.
 
-## 0.3.0 - 2026-10-13
+## 0.3.0 - 2026-10-14
 
 - Added independent Settings -> Appearance switches for showing brand country and quality category in price-list output.
 - Preserved existing metadata visibility by default, including old settings and backups.
@@ -10,6 +10,7 @@ All notable changes to Formatter are documented here.
 - Added architecture-specific Mac DMG downloads for manual updates without an Apple Developer certificate.
 - Prepared public GitHub Releases in YuriySemerey/Formatter for macOS arm64/x64 and Windows x64.
 - Added tag/version, complete-artifact, and update-checksum validation before publishing a fully uploaded draft release.
+- Added automatic release-branch publication with exact-commit tags and verified draft recovery, without requiring a local terminal or a manual workflow launch.
 - Kept local packaging commands non-publishing and preserved the stable application identity and existing user data.
 
 ## 0.2.0 - 2026-07-13

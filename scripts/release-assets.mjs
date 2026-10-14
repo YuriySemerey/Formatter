@@ -11,6 +11,14 @@ export function validateReleaseVersion(version, tag) {
   }
 }
 
+export function releaseTagFromRef(version, ref) {
+  const prefix = ["refs/tags/", "refs/heads/release/"].find((value) => ref?.startsWith(value));
+  if (!prefix) return null;
+  const tag = ref.slice(prefix.length);
+  validateReleaseVersion(version, tag);
+  return tag;
+}
+
 export function extractReleaseNotes(changelog, version) {
   const lines = changelog.split(/\r?\n/u);
   const start = lines.findIndex((line) => line.startsWith(`## ${version} - `));
@@ -67,7 +75,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const args = process.argv.slice(2);
   const pkg = JSON.parse(await readFile("package.json", "utf8"));
   if (args[0] === "--check-version") {
-    if (process.env.GITHUB_REF?.startsWith("refs/tags/")) validateReleaseVersion(pkg.version, process.env.GITHUB_REF_NAME);
+    releaseTagFromRef(pkg.version, process.env.GITHUB_REF);
+    const lock = JSON.parse(await readFile("package-lock.json", "utf8"));
+    if (pkg.version !== lock.version || pkg.version !== lock.packages?.[""]?.version) throw new Error("Package and lock versions must match");
+    extractReleaseNotes(await readFile("CHANGELOG.md", "utf8"), pkg.version);
     console.log(`Release version verified: ${pkg.version}`);
   } else if (args[0] === "--notes") {
     validateReleaseVersion(pkg.version, args[1]);

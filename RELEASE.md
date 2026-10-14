@@ -14,7 +14,9 @@
 
 The release destination is the public `YuriySemerey/Formatter` repository. Its source and installers will be visible publicly. Prepare and review the changes and test results before the owner confirms the first push or publication.
 
-After confirmation, push the prepared source, then create and push a version tag matching package.json and package-lock.json (first release: `v0.3.0`). Never reuse a published version or overwrite a tag. An ordinary push does not publish a release.
+After authorization, push the prepared source to `main` and wait for its successful verification. Create `release/vX.Y.Z` from the previous commit, then fast-forward it to the verified new commit through the connected GitHub tools. This explicit release-branch push starts publication without a terminal, account token or manual workflow launch. The first release branch is `release/v0.3.0`; its version must match package.json, package-lock.json and CHANGELOG.md.
+
+After both platform jobs pass, the publication job creates `vX.Y.Z` at the exact build commit using the workflow's built-in `GITHUB_TOKEN`. The token-created tag does not trigger another run; the same job completes publication. Existing version-tag push publication remains supported. Never reuse a published version or overwrite a tag. An ordinary push to `main` does not publish a release.
 
 The `Build installers and publish releases` workflow creates:
 
@@ -23,13 +25,15 @@ The `Build installers and publish releases` workflow creates:
 - `Formatter-X.Y.Z-win-x64.exe`.
 - `.blockmap` files, `latest.yml` and `latest-mac.yml`.
 
-Publication waits for both platform jobs. Windows additionally installs the NSIS EXE and runs the installed application smoke test. It verifies every expected installer, the two Mac ZIP architectures, version metadata, file sizes and SHA-512 checksums. Files are uploaded to a draft release, then the fully uploaded draft becomes the latest stable release. A failure leaves the previous release current; an incomplete draft is not offered by the updater.
+Publication waits for both platform jobs. Windows additionally installs the NSIS EXE and runs the installed application smoke test. It verifies every expected installer, the two Mac ZIP architectures, version metadata, file sizes and SHA-512 checksums. Files are uploaded to a draft release, then GitHub's uploaded sizes and SHA-256 digests are checked before the draft becomes the latest stable release. A failure leaves the previous release current; an incomplete draft is not offered by the updater.
+
+Publication jobs are serialized across branches and tags. A retry can resume only an unpublished draft with the same tag and exact commit. Matching assets are retained; a conflicting asset can be replaced only within that verified draft. Unexpected attachments stop publication without deleting them. A published release or a tag pointing at a different commit is never modified.
 
 The Windows job also builds a temporary 0.2.99 installer and exercises the real update service and preload IPC against a loopback update feed. It verifies explicit downloading, progress, native NSIS replacement with the current production installer, and settings/history/brand edits in the restarted production renderer. CI uses silent installation to automate the installer wizard; production continues to use the user-confirmed installation flow. The feed override and test bootstrap exist only in the temporary installer. The JSON evidence is saved as a separate `Windows-update-test-report` Actions artifact and is excluded from public release assets.
 
 `beforeBuild` applies a narrowly checked NSIS template backport from [electron-builder #9769](https://github.com/electron-userland/electron-builder/pull/9769). This fixes a per-user install path buffer over-read that can crash setup with `0xC0000005`. The agreed electron-builder 26.0.12 and electron-updater 6.6.2 pins remain unchanged. The original dependency template is preserved in an ignored backup, repeated Windows builds are supported, and an unrecognized template fails the build instead of applying an unchecked patch.
 
-Pushes to `main` automatically run the same build verification and produce Actions artifacts; their publication job is skipped. A manual workflow run also builds downloadable Actions artifacts without publishing. Only a version tag can publish a release. Local commands never publish. Use a fresh version-specific output directory to keep older local applications:
+Pushes to `main` automatically run the same build verification and produce Actions artifacts; their publication job is skipped. A manual workflow run also builds downloadable Actions artifacts without publishing, including when a release branch is selected. Only explicit release-branch or version-tag pushes can publish. Local commands never publish. Use a fresh version-specific output directory to keep older local applications:
 
 ```bash
 npm run dist:mac -- --config.directories.output=release/0.3.0
@@ -44,7 +48,7 @@ node scripts/release-assets.mjs release/0.3.0 0.3.0 mac
 node scripts/release-assets.mjs release/0.3.0 0.3.0 win
 ```
 
-Only the tag publication job has `contents: write`; it uses GitHub's workflow token. No account token belongs in the application or committed files.
+Only the publication job has `contents: write`; it uses GitHub's workflow token. No account token belongs in the application or committed files.
 
 ## Upgrade Test
 

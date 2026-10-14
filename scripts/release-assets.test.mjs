@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { extractReleaseNotes, validateReleaseVersion, verifyReleaseAssets } from "./release-assets.mjs";
+import { extractReleaseNotes, releaseTagFromRef, validateReleaseVersion, verifyReleaseAssets } from "./release-assets.mjs";
 
 const directories = [];
 afterEach(async () => { await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
@@ -48,5 +48,13 @@ describe("release publication gate", () => {
     expect(() => validateReleaseVersion("0.3.0", "v0.2.0")).toThrow();
     expect(() => validateReleaseVersion("0.3.0", "v0.3.0")).not.toThrow();
     expect(extractReleaseNotes("# Changelog\n\n## 0.3.0 - 2026-10-13\n\n- New version\n\n## 0.2.0 - 2026-07-13\n\n- Old version", "0.3.0")).toBe("- New version\n");
+  });
+  it("requires release branches and tags to match the package version", () => {
+    expect(releaseTagFromRef("0.3.0", "refs/heads/main")).toBeNull();
+    expect(releaseTagFromRef("0.3.0", "refs/heads/release/v0.3.0")).toBe("v0.3.0");
+    expect(releaseTagFromRef("0.3.0", "refs/tags/v0.3.0")).toBe("v0.3.0");
+    for (const ref of ["refs/heads/release/v0.2.0", "refs/heads/release/v0.3.0-beta", "refs/tags/v0.3.1"]) {
+      expect(() => releaseTagFromRef("0.3.0", ref)).toThrow();
+    }
   });
 });

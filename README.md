@@ -51,9 +51,11 @@ Before an update, `Settings -> About` can export one JSON backup containing sett
 
 ## GitHub Releases
 
-The intended public repository is `YuriySemerey/Formatter`. Code and release installers are public; downloading release installers requires no GitHub account. Repository creation and the first push/release require the project owner's confirmation.
+The public repository is [YuriySemerey/Formatter](https://github.com/YuriySemerey/Formatter). Code and release installers are public; downloading release installers requires no GitHub account. Prepare and review a release before the project owner authorizes publication.
 
-`.github/workflows/build-installers.yml` builds macOS and Windows independently. A `vX.Y.Z` tag matching package.json creates a release only after both builds and checks pass. All installers, blockmaps and update metadata are uploaded to a draft before it is made available. An ordinary push does not publish; a manual workflow run builds artifacts without publishing.
+`.github/workflows/build-installers.yml` builds macOS and Windows independently. An explicit push to `release/vX.Y.Z` matching package.json publishes after both builds and checks pass, creating the version tag at the exact tested commit. Existing `vX.Y.Z` tag pushes also remain supported. All installers, blockmaps and update metadata are verified in an unpublished draft before it becomes available. Ordinary pushes to `main` and manual workflow runs only build artifacts.
+
+An authorized release can be started through the connected GitHub tools by advancing its release branch; no local terminal, personal access token or manual Actions click is required. Published releases and existing tags at another commit are never replaced. See [Releases](https://github.com/YuriySemerey/Formatter/releases) for the permanent public downloads.
 
 Local packaging always uses `--publish never`. To preserve older local unpacked applications, use a version-specific output directory:
 

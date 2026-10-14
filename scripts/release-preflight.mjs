@@ -11,6 +11,7 @@ const requiredFiles = [
   "dist-electron/preload.cjs",
   "dist-electron/updateService.js",
   "scripts/release-assets.mjs",
+  "scripts/publish-release.mjs",
   "scripts/windows-update-smoke.mjs",
   "scripts/windows-update-test-main.cjs",
   "scripts/prepare-nsis.cjs",
@@ -120,14 +121,26 @@ if (!packageJson.author) {
 }
 const workflow = load(buildWorkflow);
 const publish = workflow.jobs?.publish;
+for (const platform of ["macos", "windows"]) {
+  const upload = workflow.jobs?.[platform]?.steps?.find((step) => step.uses?.startsWith("actions/upload-artifact@") && step.with?.name?.startsWith("Formatter-"));
+  if (!upload?.with?.name?.includes("${{ github.sha }}")) fail("installer artifact names must use the commit SHA, not slash-containing release branch names");
+}
 if (!buildWorkflow.includes("npm run smoke:electron") || !publish?.needs?.includes("macos") || !publish.needs.includes("windows")) {
   fail("release publication must wait for verified macOS and Windows builds");
 }
-if (!publish.if?.includes("startsWith(github.ref, 'refs/tags/v')") || !publish.if.includes("github.event_name == 'push'") || publish.permissions?.contents !== "write") {
-  fail("only a version tag may publish a release; ordinary pushes must not publish");
+const publicationCondition = "github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v'))";
+if (publish.if?.replace(/\s+/gu, " ").trim() !== publicationCondition || publish.permissions?.contents !== "write" || workflow.permissions?.contents !== "read") {
+  fail("only version tags or release branches may publish; main and manual builds must not publish");
 }
-if (!buildWorkflow.includes("release-assets.mjs release") || !buildWorkflow.includes("--draft") || !buildWorkflow.includes("--draft=false --latest")) {
+if (!workflow.on?.push?.branches?.includes("release/v*.*.*") || publish.concurrency?.group !== "formatter-publish" || publish.concurrency["cancel-in-progress"] !== false) {
+  fail("release branch publication must be enabled and serialized without cancelling uploads");
+}
+const publisher = await readFile(path.join(root, "scripts/publish-release.mjs"), "utf8");
+if (!buildWorkflow.includes("release-assets.mjs release") || !buildWorkflow.includes("node scripts/publish-release.mjs") || !publisher.includes("draft: true") || !publisher.includes('make_latest: "true"')) {
   fail("workflow must validate complete assets and publish a fully uploaded draft");
+}
+for (const platform of ["MACOS", "WINDOWS"]) {
+  if (!buildWorkflow.includes(`RELEASE_${platform}_RESULT`)) fail("publication must receive both platform results");
 }
 if (!buildWorkflow.includes("node scripts/windows-update-smoke.mjs")) {
   fail("Windows CI must verify a native update and persistence between installed versions");
@@ -147,4 +160,4 @@ if (nodeMajor < 22 || nodeMajor >= 25) {
   fail(`Node ${process.versions.node} is unsupported; use Node 22, 23, or 24`);
 }
 
-console.log("Release preflight passed: dependencies, assets, Electron IPC, update provider, and tag-only publication are valid.");
+console.log("Release preflight passed: dependencies, assets, Electron IPC, update provider, and version-tag/release-branch publication are valid.");

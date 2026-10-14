@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - "release/v*.*.*"
     tags:
       - "v*.*.*"
 
@@ -37,7 +38,7 @@ jobs:
       - run: node scripts/release-assets.mjs --platform mac
       - uses: actions/upload-artifact@v4
         with:
-          name: Formatter-${{ github.ref_name }}-macOS
+          name: Formatter-${{ github.sha }}-macOS
           path: |
             release/*.dmg
             release/*.zip
@@ -92,7 +93,7 @@ jobs:
           retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
-          name: Formatter-${{ github.ref_name }}-Windows
+          name: Formatter-${{ github.sha }}-Windows
           path: |
             release/*.exe
             release/*.blockmap
@@ -102,9 +103,15 @@ jobs:
 
   publish:
     name: Publish complete GitHub release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      github.event_name == 'push' &&
+      (startsWith(github.ref, 'refs/tags/v') || startsWith(github.ref, 'refs/heads/release/v'))
     needs: [macos, windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: formatter-publish
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
@@ -123,16 +130,9 @@ jobs:
           pattern: Formatter-*
       - run: node scripts/release-assets.mjs --check-version
       - run: node scripts/release-assets.mjs release
-      - name: Prepare release notes
-        run: node scripts/release-assets.mjs --notes "$GITHUB_REF_NAME" release-notes.md
-      - name: Upload all assets to a draft release
+      - name: Create the exact version tag and publish the complete draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME" --verify-tag --draft
-          --title "Formatter $GITHUB_REF_NAME" --notes-file release-notes.md
-          release/*.dmg release/*.zip release/*.exe release/*.blockmap release/latest*.yml
-      - name: Make the complete release available to the updater
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+          RELEASE_MACOS_RESULT: ${{ needs.macos.result }}
+          RELEASE_WINDOWS_RESULT: ${{ needs.windows.result }}
+        run: node scripts/publish-release.mjs
