@@ -1,0 +1,42 @@
+name: Verify public Formatter 0.3.0 downloads
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/verify-published-release.yml]
+
+# This verification only downloads public files; it receives no repository permissions.
+permissions: {}
+
+jobs:
+  public-downloads:
+    name: Download without GitHub authentication and verify checksums
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify the public Windows installer and update metadata
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          const files = [
+            { name: 'Formatter-0.3.0-win-x64.exe', size: 98285459, sha256: '9a4fa1a845336519ffa00f7177df0169f62ce2331dd8e909dd0900873cc2c929' },
+            { name: 'latest.yml', size: 350, sha256: '4039b5ef53dd27642e480a25dec5c176ba9ad192a245f5e57e5286745fd6b384' },
+            { name: 'latest-mac.yml', size: 831, sha256: '0802fa9855388e814738d668bac9b54fb747c798947b2a53f2c42797f51c457c' }
+          ];
+          for (const file of files) {
+            const url = `https://github.com/YuriySemerey/Formatter/releases/download/v0.3.0/${file.name}`;
+            // Deliberately no Authorization header or GH_TOKEN: these must work for everyone.
+            const response = await fetch(url, { headers: { 'Accept-Encoding': 'identity' }, signal: AbortSignal.timeout(180_000) });
+            if (!response.ok) throw new Error(`Anonymous download failed: ${file.name}, HTTP ${response.status}`);
+            const hash = createHash('sha256');
+            let size = 0;
+            for await (const chunk of response.body) { hash.update(chunk); size += chunk.length; }
+            if (size !== file.size || hash.digest('hex') !== file.sha256) throw new Error(`Public download checksum/size mismatch: ${file.name}`);
+            console.log(`ANONYMOUS_DOWNLOAD_VERIFIED: ${file.name}, ${size} bytes, SHA-256 matched`);
+          }
+          NODE
