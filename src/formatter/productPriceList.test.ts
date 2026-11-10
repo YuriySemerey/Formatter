@@ -486,13 +486,13 @@ Hyundai / Kia — 4 342 грн
 AND — 2 189 грн`);
   });
 
-  it("uses later valid total prices when copied rows contain extra price values", () => {
+  it("uses the second unit and subtotal columns when copied rows contain both prices", () => {
     const output = formatWithoutBrandMetadata(
       "Гальмівний диск (17525) A.B.S. Гальмівний диск (17525) 1 714 грн 1 695 грн 3 428 грн 3 390 грн"
     );
 
     expect(output).toBe(`Гальмівний диск
-A.B.S. — 1 714 грн / 3 428 грн за 2 шт`);
+A.B.S. — 1 695 грн / 3 390 грн за 2 шт`);
   });
 
   it("keeps code-only rows under misc or the next known category without code headings", () => {

@@ -11,6 +11,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe("metadata visibility in the application", () => {
+  it("formats a Windows cart with quantities through the real Format button and preserves brand edits", () => {
+    render(<App />);
+    const input = "Гальмівний диск (DF4323)\r\nBrembo\r\nГальмівний диск (DF4323)\r\n2 756 грн\r\n2 306 грн\r\n\r\n2\r\n\r\n5 512 грн\r\n4 612 грн";
+    fireEvent.change(screen.getByPlaceholderText("Вставте скопійований прайс-лист..."), { target: { value: input } });
+    fireEvent.click(screen.getByRole("button", { name: "Format" }));
+    const expected = "Гальмівний диск\nBrembo — 2 306 грн / 4 612 грн за 2 шт - якісний замінник, Італія";
+    expect(screen.getByPlaceholderText("Сформатований текст з'явиться тут...")).toHaveValue(expected);
+    expect(JSON.parse(localStorage.getItem("formatter.history.v1")!)[0].output).toBe(expected);
+    expect(JSON.parse(localStorage.getItem(BROWSER_BRAND_OVERRIDES_STORAGE_KEY)!)[0].country).toBe("Італія");
+  });
+
   it("keeps existing output/history until Format, persists switches, and restores them on restart", () => {
     const view = render(<App />);
     fireEvent.change(screen.getByPlaceholderText("Вставте скопійований прайс-лист..."), { target: { value: "Гальмівний диск (DF4323) Brembo Гальмівний диск (DF4323) 2 306 грн" } });

@@ -1,7 +1,7 @@
 {
   "name": "product-price-formatter",
   "productName": "Formatter",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Desktop formatter for copied Ukrainian product price lists.",
   "author": "dw",
   "repository": {

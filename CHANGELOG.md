@@ -2,6 +2,13 @@
 
 All notable changes to Formatter are documented here.
 
+## 0.3.1 - 2026-11-10
+
+- Fixed copied Windows cart rows: line breaks and tab-separated cells now keep quantities and subtotals with the correct product.
+- Prevented quantity values from becoming numeric section headings or phantom unknown-brand products.
+- Preserved explicit quantities, used the second unit/subtotal column when both prices are copied, and supported amounts with cents and nonbreaking-space thousands.
+- Added regression coverage from the reported screenshots, a real Format-button check, and installed Windows renderer verification after an update.
+
 ## 0.3.0 - 2026-10-14
 
 - Added independent Settings -> Appearance switches for showing brand country and quality category in price-list output.

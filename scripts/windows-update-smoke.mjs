@@ -177,9 +177,37 @@ try {
   assert.equal(saved.settings.darkMode, true);
   assert.equal(saved.history[0].output, "Saved before update");
   assert.equal(saved.brands[0].country, "Test country");
+  const copiedCart = [
+    "Сайлентблок важеля (23145ap)", "Applus", "Сайлентблок важеля (23145ap)", "545 грн", "", "2", "", "1 090 грн",
+    "Датчик температури охолоджувальної рідини (32510)", "Febi", "Датчик температури охолоджувальної рідини (32510)", "351 грн", "", "1", "", "351 грн",
+    "Свічка запалювання (OE136/T10)", "Champion", "Свічка запалювання (OE136/T10)", "343 грн", "257 грн", "", "4", "", "1 372 грн", "1 028 грн"
+  ].join("\r\n");
+  await renderer.evaluate(`(() => {
+    const input = document.querySelector('textarea[placeholder="Вставте скопійований прайс-лист..."]');
+    if (!input) throw new Error('Production formatter input is missing');
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, ${JSON.stringify(copiedCart)});
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  await pause(100);
+  await renderer.evaluate(`(() => {
+    const format = [...document.querySelectorAll('button')].find(button => button.textContent.trim() === 'Format');
+    if (!format) throw new Error('Production Format button is missing');
+    format.click();
+    return true;
+  })()`);
+  let clipboardResult;
+  const outputSelector = `textarea[placeholder="Сформатований текст з'явиться тут..."]`;
+  for (let attempt = 0; attempt < 50; attempt++) {
+    clipboardResult = await renderer.evaluate(`document.querySelector(${JSON.stringify(outputSelector)})?.value`);
+    if (clipboardResult) break;
+    await pause(100);
+  }
+  assert.equal(clipboardResult?.replace(/ - [^\n]+/gu, ""), "Сайлентблок важеля\nApplus — 545 грн / 1 090 грн за 2 шт\n\nДатчик температури охолоджувальної рідини\nFebi — 351 грн\n\nСвічка запалювання\nChampion — 257 грн / 1 028 грн за 4 шт", "Installed Windows renderer must keep quantities, current prices, subtotals and product boundaries");
   await mkdir("artifacts", { recursive: true });
-  await writeFile("artifacts/windows-update-test.json", JSON.stringify({ from: "0.2.99", to: current.version, upgraded, saved, requests }, null, 2));
+  await writeFile("artifacts/windows-update-test.json", JSON.stringify({ from: "0.2.99", to: current.version, upgraded, saved, requests, clipboardResult }, null, 2));
   console.log("WINDOWS_UPDATE_SMOKE_PASSED: explicit download, native NSIS upgrade, and persisted settings/history/brands verified");
+  console.log("WINDOWS_CLIPBOARD_SMOKE_PASSED: installed production renderer formats Windows cart quantities and totals");
 } finally {
   renderer?.socket.close();
   updatedProcess?.kill();

@@ -72,7 +72,8 @@ interface PriceMatch {
   end: number;
 }
 
-const PRICE_PATTERN = /(\d{1,3}(?:\s\d{3})*|\d+)\s*грн?/giu;
+// Spaces may group thousands; newlines and tabs separate copied cart cells.
+const PRICE_PATTERN = /((?:\d{1,3}(?: \d{3})*|\d+)(?:[.,]\d{1,2})?)\s*грн?/giu;
 
 export function formatProductPriceList(input: string, brandOverrides: BrandOverride[] = [], options: BrandMetadataDisplayOptions = {}): string {
   const products = parseProductStream(input, brandOverrides);
@@ -103,7 +104,7 @@ export function formatProductPriceList(input: string, brandOverrides: BrandOverr
 }
 
 export function parseProductStream(input: string, brandOverrides: BrandOverride[] = []): ParsedProduct[] {
-  const normalized = input.replace(/\r\n?/g, "\n").replace(/\s+/g, " ").trim();
+  const normalized = input.replace(/\r\n?/g, "\n").replace(/[^\S\n\t]+/g, " ").trim();
   if (!normalized) {
     return [];
   }
@@ -115,27 +116,50 @@ export function parseProductStream(input: string, brandOverrides: BrandOverride[
 
   for (let index = 0; index < prices.length; index += 1) {
     const firstPrice = prices[index];
-    const segment = normalized.slice(cursor, firstPrice.start).trim();
-    if (!segment) {
+    const segment = cleanupSpaces(normalized.slice(cursor, firstPrice.start));
+    if (!segment || /^\d+(?:\s*шт\.?)?$/iu.test(segment)) {
       cursor = firstPrice.end;
       continue;
     }
 
     const priceRun = [firstPrice];
+    let explicitQuantity: number | undefined;
+    let subtotalStart = 1;
     let runIndex = index + 1;
-    while (prices[runIndex] && normalized.slice(priceRun[priceRun.length - 1].end, prices[runIndex].start).trim() === "") {
+    while (prices[runIndex]) {
+      const gap = normalized.slice(priceRun[priceRun.length - 1].end, prices[runIndex].start).trim();
+      if (gap) {
+        const quantity = parseCopiedQuantity(gap);
+        if (quantity === undefined || explicitQuantity !== undefined) break;
+        explicitQuantity = quantity;
+        subtotalStart = priceRun.length;
+      }
       priceRun.push(prices[runIndex]);
       runIndex += 1;
     }
 
+    let nextCursor = priceRun[priceRun.length - 1].end;
+    if (explicitQuantity === undefined) {
+      // A selection can end after the quantity, or omit the subtotal before the next item.
+      const remainder = normalized.slice(nextCursor, prices[runIndex]?.start);
+      const trailingQuantity = remainder.match(/^\s*([1-9]\d*(?: *шт\.?)?) *(?=[\n\t]|$)/iu);
+      if (trailingQuantity) {
+        explicitQuantity = parseCopiedQuantity(trailingQuantity[1]);
+        subtotalStart = priceRun.length;
+        nextCursor += trailingQuantity[0].length;
+      }
+    }
+
     const split = splitRepeatedProductSegment(segment, brandOverrides);
+    const pricing = selectProductPricing(priceRun.map((match) => match.value), subtotalStart, explicitQuantity);
     const product = buildProduct(
       split.title,
       split.brand,
-      firstPrice.value,
-      selectTotalPrice(firstPrice.value, priceRun.slice(1).map((match) => match.value)),
+      pricing.unitPrice,
+      pricing.totalPrice,
       products.length,
-      previousCategory
+      previousCategory,
+      explicitQuantity
     );
     if (product) {
       products.push(product);
@@ -147,7 +171,7 @@ export function parseProductStream(input: string, brandOverrides: BrandOverride[
     }
 
     index = runIndex - 1;
-    cursor = priceRun[priceRun.length - 1].end;
+    cursor = nextCursor;
   }
 
   return dedupeProducts(applyForwardCategoryFallback(products));
@@ -155,14 +179,49 @@ export function parseProductStream(input: string, brandOverrides: BrandOverride[
 
 function findPrices(input: string): PriceMatch[] {
   return [...input.matchAll(PRICE_PATTERN)].map((match) => ({
-    value: Number(match[1].replace(/\s/g, "")),
+    value: Number(match[1].replace(/ /g, "").replace(",", ".")),
     start: match.index ?? 0,
     end: (match.index ?? 0) + match[0].length
   }));
 }
 
-function selectTotalPrice(unitPrice: number, candidates: number[]) {
-  return candidates.find((candidate) => candidate > unitPrice && candidate % unitPrice === 0) ?? candidates.find((candidate) => candidate > unitPrice);
+function parseCopiedQuantity(value: string) {
+  const match = value.match(/^([1-9]\d*)(?:\s*шт\.?)?$/iu);
+  const quantity = match ? Number(match[1]) : undefined;
+  return quantity !== undefined && Number.isSafeInteger(quantity) ? quantity : undefined;
+}
+
+function priceInCents(value: number) {
+  return Math.round(value * 100);
+}
+
+function selectProductPricing(prices: number[], subtotalStart: number, explicitQuantity?: number) {
+  if (explicitQuantity !== undefined) {
+    // The cart copies both list and current unit prices before its quantity cell.
+    const unitColumn = subtotalStart > 1 ? 1 : 0;
+    const unitPrice = prices[unitColumn];
+    const subtotals = prices.slice(subtotalStart);
+    const totalPrice = subtotals.length >= subtotalStart
+      ? subtotals[unitColumn]
+      : selectTotalPrice(unitPrice, subtotals, explicitQuantity);
+    return { unitPrice, totalPrice };
+  }
+  if (prices.length === 4) {
+    // In flat copies the quantity can merge with the first subtotal ("1 343 грн").
+    // The second unit/subtotal pair still identifies the current price and quantity.
+    const secondQuantity = priceInCents(prices[3]) / priceInCents(prices[1]);
+    if (Number.isSafeInteger(secondQuantity) && secondQuantity >= 1) {
+      return { unitPrice: prices[1], totalPrice: prices[3] };
+    }
+  }
+  return { unitPrice: prices[0], totalPrice: selectTotalPrice(prices[0], prices.slice(1)) };
+}
+
+function selectTotalPrice(unitPrice: number, candidates: number[], explicitQuantity?: number) {
+  if (explicitQuantity !== undefined) {
+    return candidates.find((candidate) => priceInCents(candidate) === priceInCents(unitPrice) * explicitQuantity) ?? candidates[0];
+  }
+  return candidates.find((candidate) => candidate > unitPrice && priceInCents(candidate) % priceInCents(unitPrice) === 0) ?? candidates.find((candidate) => candidate > unitPrice);
 }
 
 function splitRepeatedProductSegment(segment: string, brandOverrides: BrandOverride[]) {
@@ -330,7 +389,8 @@ function buildProduct(
   price: number,
   secondPrice: number | undefined,
   sourceOrder: number,
-  previousCategory?: CategoryInfo
+  previousCategory?: CategoryInfo,
+  explicitQuantity?: number
 ): ParsedProduct | undefined {
   const title = cleanupTitle(rawTitle);
   const brand = normalizeBrand(rawBrand);
@@ -338,8 +398,10 @@ function buildProduct(
     return undefined;
   }
 
-  const totalPrice = secondPrice && secondPrice > price ? secondPrice : undefined;
-  const quantity = totalPrice && totalPrice % price === 0 ? totalPrice / price : undefined;
+  const totalPrice = explicitQuantity !== undefined
+    ? secondPrice ?? priceInCents(price * explicitQuantity) / 100
+    : secondPrice && secondPrice > price ? secondPrice : undefined;
+  const quantity = explicitQuantity ?? (totalPrice && priceInCents(totalPrice) % priceInCents(price) === 0 ? priceInCents(totalPrice) / priceInCents(price) : undefined);
   const category = inferCategory(title, brand, previousCategory);
   const volumeLiters = inferVolumeLiters(title);
 
@@ -366,7 +428,8 @@ function dedupeProducts(products: ParsedProduct[]) {
       product.brand.toLocaleLowerCase("uk"),
       product.lineName.toLocaleLowerCase("uk"),
       product.price,
-      product.totalPrice ?? ""
+      product.totalPrice ?? product.price,
+      product.quantity ?? 1
     ].join("|");
 
     if (seen.has(key)) {
