@@ -2,6 +2,20 @@
 
 All notable changes to Formatter are documented here.
 
+## 0.3.3 - 2026-11-21
+
+- Added custom brand categories and editable names for built-in/custom categories; stable IDs preserve all brand assignments when names change.
+- Persist category definitions in settings/backups and include them in brand JSON exports, while accepting legacy arrays and rejecting missing references before import.
+- Verify category creation, duplicate checks, renaming, cancellation, save/reload, formatting switches, backups and installed-platform persistence.
+- Added custom brands and editable names for existing brands under Settings -> Brands, with duplicate/alias checks and a draft/save workflow.
+- Preserve original names when renaming, use the edited name in formatted output, and include custom brands/renames in storage, imports/exports and backups.
+- Keep the built-in catalog intact; allow restoring a base brand or removing a custom draft entry.
+- Verify brand creation, rename, native save/reload, old-name recognition and unchanged history through the production UI, including installed-platform CI checks.
+- Added HTML alongside exact plain text when copying formatted output, with explicit line breaks and nonempty spacer lines for rich-text editors such as HelpCrunch.
+- Applied the same copy format to Copy, history-copy buttons, and keyboard copying of selected output; HTML special characters stay literal text.
+- Added real system-clipboard paste checks for Copy and keyboard selection, including installed Windows and native Mac bundles, without contacting HelpCrunch.
+- Report failed clipboard writes instead of claiming that copying succeeded.
+
 ## 0.3.2 - 2026-11-21
 
 - Fixed invalid macOS bundle signatures that caused installed Apple Silicon builds to appear damaged.

@@ -1,3 +1,5 @@
+import type { BrandCategoryDefinition } from "../../electron/brandCategories";
+
 export type Encoding = "UTF-8" | "UTF-16LE" | "Windows-1251" | "ISO-8859-1" | "ASCII";
 
 export type FormatterMode = "product-price-list" | "generic-text";
@@ -35,12 +37,14 @@ export interface AppSettings {
   loggingEnabled: boolean;
   showBrandCountry: boolean;
   showBrandCategory: boolean;
+  brandCategories: BrandCategoryDefinition[];
   genericOptions: GenericFormatOptions;
 }
 
 export interface BrandMetadataDisplayOptions {
   showBrandCountry?: boolean;
   showBrandCategory?: boolean;
+  brandCategories?: BrandCategoryDefinition[];
 }
 
 export interface HistoryItem {
@@ -48,3 +52,4 @@ export interface HistoryItem {
   createdAt: string;
   output: string;
 }
+

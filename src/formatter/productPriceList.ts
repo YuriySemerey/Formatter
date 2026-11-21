@@ -162,6 +162,7 @@ export function parseProductStream(input: string, brandOverrides: BrandOverride[
       explicitQuantity
     );
     if (product) {
+      product.brand = resolveUserBrandAlias(product.brand, brandOverrides) ?? product.brand;
       products.push(product);
       previousCategory = {
         key: product.categoryKey,

@@ -852,6 +852,43 @@ textarea {
   min-width: 220px;
 }
 
+.brand-entry-form {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(160px, 220px) minmax(160px, 220px) auto;
+  gap: 10px;
+  align-items: end;
+  padding: 12px;
+  border: 1px solid var(--border-color, #b4a58f);
+  border-radius: 8px;
+}
+
+.brand-entry-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+}
+
+.brand-entry-form input,
+.brand-entry-form select { width: 100%; }
+.brand-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.brand-form-hint,
+.brand-form-error { grid-column: 1 / -1; margin: 0; font-size: 13px; }
+.brand-form-error { color: #bd3f35; }
+.brand-rename-button { margin-top: 6px; min-height: 28px; padding: 3px 6px; font-size: 12px; }
+
+.category-editor { border: 1px solid #b4a58f; border-radius: 8px; padding: 12px; }
+.category-editor h3 { margin: 0 0 6px; font-size: 16px; }
+.category-editor > p { margin: 0 0 10px; font-size: 13px; }
+.category-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.category-form label { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 200px; font-size: 13px; }
+.category-form input { width: 100%; }
+.category-error { flex-basis: 100%; color: #bd3f35; margin: 0; font-size: 13px; }
+.category-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; max-height: 180px; overflow: auto; }
+.category-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px; }
+.category-list li > span { overflow-wrap: anywhere; }
+.category-list button { flex-shrink: 0; min-height: 28px; padding: 3px 6px; font-size: 12px; }
+
 .brand-table td strong,
 .brand-table td small {
   display: block;
@@ -1071,6 +1108,7 @@ textarea {
 .theme-dark .toolbar label,
 .theme-dark .generic-options label,
 .theme-dark .brand-toolbar label,
+.theme-dark .brand-entry-form label,
 .theme-dark .density-setting,
 .theme-dark .settings-card p,
 .theme-dark .brand-summary,
@@ -1552,7 +1590,8 @@ textarea {
   }
 
   .brand-toolbar,
-  .brand-add-row {
+  .brand-add-row,
+  .brand-entry-form {
     grid-template-columns: 1fr 1fr;
   }
 

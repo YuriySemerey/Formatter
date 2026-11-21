@@ -1,6 +1,7 @@
 import { sanitizeBrandOverrides, type BrandOverride } from "./brandRegistry";
 import { normalizeHistory, normalizeSettings } from "./settings";
 import type { AppSettings, HistoryItem } from "./types";
+import { assertBrandCategoryReferences } from "../../electron/brandCategories";
 
 export const BACKUP_SCHEMA_VERSION = 1;
 
@@ -18,13 +19,16 @@ export function createFormatterBackup(
   appVersion: string,
   now = new Date()
 ): FormatterBackup {
+  const settings = normalizeSettings(input.settings);
+  const brandOverrides = sanitizeBrandOverrides(input.brandOverrides);
+  assertBrandCategoryReferences(brandOverrides, settings.brandCategories);
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     createdAt: now.toISOString(),
     appVersion: cleanupText(appVersion) || "unknown",
-    settings: normalizeSettings(input.settings),
+    settings,
     history: normalizeHistory(input.history),
-    brandOverrides: sanitizeBrandOverrides(input.brandOverrides)
+    brandOverrides
   };
 }
 
@@ -36,13 +40,16 @@ export function normalizeFormatterBackup(value: unknown): FormatterBackup {
     throw new Error("backup-data-is-invalid");
   }
 
+  const settings = normalizeSettings(value.settings);
+  const brandOverrides = sanitizeBrandOverrides(value.brandOverrides);
+  assertBrandCategoryReferences(brandOverrides, settings.brandCategories);
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     createdAt: cleanupText(value.createdAt) || new Date().toISOString(),
     appVersion: cleanupText(value.appVersion) || "unknown",
-    settings: normalizeSettings(value.settings),
+    settings,
     history: normalizeHistory(value.history),
-    brandOverrides: sanitizeBrandOverrides(value.brandOverrides)
+    brandOverrides
   };
 }
 

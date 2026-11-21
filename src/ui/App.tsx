@@ -9,7 +9,9 @@ import {
   Info,
   ListChecks,
   Pin,
+  Pencil,
   Play,
+  Plus,
   RotateCcw,
   Save,
   Search,
@@ -22,8 +24,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
-  BRAND_CATEGORY_LABELS,
   getBrandCatalog,
+  getBrandOverrideId,
   normalizeBrandKey,
   sanitizeBrandOverrides,
   type BrandCatalogEntry,
@@ -42,11 +44,15 @@ import {
   saveSettings
 } from "../formatter/settings";
 import type { AppSettings, Encoding, FormatterMode, HistoryItem } from "../formatter/types";
-import { loadBrowserBrandOverrides, saveBrowserBrandOverrides, serializeBrandOverrides } from "./brandOverrideStorage";
+import { loadBrowserBrandOverrides, saveBrowserBrandOverrides } from "./brandOverrideStorage";
 import { UpdatePanel } from "./UpdatePanel";
+import { copyFormattedSelection, writeFormattedClipboard } from "./clipboard";
+import { updateBrandDraft, type BrandEdit } from "./brandEdits";
+import { CategoryEditor } from "./CategoryEditor";
+import { assertBrandCategoryReferences, normalizeBrandCategories, validateBrandCategories, type BrandCategoryDefinition } from "../../electron/brandCategories";
+import { createBrandLibrary, parseBrandLibrary } from "../../electron/brandLibrary";
 
 const ENCODINGS: Encoding[] = ["UTF-8", "UTF-16LE", "Windows-1251", "ISO-8859-1", "ASCII"];
-const BRAND_CATEGORIES = Object.keys(BRAND_CATEGORY_LABELS) as BrandQualityCategory[];
 const UNKNOWN_COUNTRY_LABEL = "країна не визначена";
 type BrandStorageMode = "electron" | "browser";
 type BrandIssueFilter = "all" | "missingCountry" | "missingCategory";
@@ -73,6 +79,7 @@ export function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [brandOverrides, setBrandOverrides] = useState<BrandOverride[]>([]);
   const [brandDraftOverrides, setBrandDraftOverrides] = useState<BrandOverride[]>([]);
+  const [brandDraftCategories, setBrandDraftCategories] = useState(() => normalizeBrandCategories(settings.brandCategories));
   const [brandStorageMode, setBrandStorageMode] = useState<BrandStorageMode>(window.formatterApp?.loadBrandOverrides ? "electron" : "browser");
   const [appInfo, setAppInfo] = useState<FormatterAppInfo>({ name: "Formatter", version: "Browser/dev", platform: "browser", arch: "" });
 
@@ -235,13 +242,12 @@ export function App() {
       return;
     }
 
-    if (window.formatterApp?.writeClipboard) {
-      await window.formatterApp.writeClipboard(value);
-    } else {
-      await navigator.clipboard.writeText(value);
+    try {
+      await writeFormattedClipboard(value);
+      updateStatus("Скопійовано");
+    } catch {
+      updateStatus("Не вдалося скопіювати текст. Спробуйте ще раз.", "error");
     }
-
-    updateStatus("Скопійовано");
   }
 
   function clearText() {
@@ -262,22 +268,20 @@ export function App() {
     updateStatus("Запис історії видалено");
   }
 
-  async function saveBrandDrafts(nextDrafts = brandDraftOverrides) {
-    if (!window.formatterApp?.saveBrandOverrides) {
-      const saved = saveBrowserBrandOverrides(nextDrafts);
-      setBrandOverrides(saved);
-      setBrandDraftOverrides(saved);
-      setBrandStorageMode("browser");
-      updateStatus(`Правки збережено локально в browser-режимі: ${saved.length}`);
-      return true;
-    }
-
+  async function saveBrandDrafts(nextDrafts = brandDraftOverrides, nextCategories = brandDraftCategories) {
     try {
       const sanitized = sanitizeBrandOverrides(nextDrafts);
-      const saved = sanitizeBrandOverrides(await window.formatterApp.saveBrandOverrides(sanitized as BrandOverridePayload[]));
+      const categories = validateBrandCategories(nextCategories);
+      assertBrandCategoryReferences(sanitized, categories);
+      const saved = window.formatterApp?.saveBrandOverrides
+        ? sanitizeBrandOverrides(await window.formatterApp.saveBrandOverrides(sanitized as BrandOverridePayload[], categories))
+        : saveBrowserBrandOverrides(sanitized);
       setBrandOverrides(saved);
       setBrandDraftOverrides(saved);
-      updateStatus(`Збережено правки брендів: ${saved.length}`);
+      setBrandDraftCategories(categories);
+      setSettings((current) => ({ ...current, brandCategories: categories }));
+      if (!window.formatterApp?.saveBrandOverrides) setBrandStorageMode("browser");
+      updateStatus(`Збережено бренди й категорії: ${saved.length} правок брендів`);
       return true;
     } catch {
       updateStatus("Не вдалося зберегти правки брендів", "error");
@@ -286,15 +290,14 @@ export function App() {
   }
 
   async function exportBrandDrafts() {
-    if (!window.formatterApp?.exportBrandOverrides) {
-      exportBrandOverridesFromBrowser(brandDraftOverrides);
-      updateStatus("Правки брендів експортовано з browser-режиму");
-      return;
-    }
-
     try {
+      if (!window.formatterApp?.exportBrandOverrides) {
+        exportBrandOverridesFromBrowser(brandDraftOverrides, brandDraftCategories);
+        updateStatus("Бренди й категорії експортовано");
+        return;
+      }
       const sanitized = sanitizeBrandOverrides(brandDraftOverrides);
-      const result = await window.formatterApp.exportBrandOverrides(sanitized as BrandOverridePayload[]);
+      const result = await window.formatterApp.exportBrandOverrides(sanitized as BrandOverridePayload[], brandDraftCategories);
       updateStatus(result.canceled ? "Експорт скасовано" : "Правки брендів експортовано", result.canceled ? "warning" : "info");
     } catch {
       updateStatus("Не вдалося експортувати правки брендів", "error");
@@ -304,12 +307,8 @@ export function App() {
   async function importBrandDrafts() {
     if (!window.formatterApp?.importBrandOverrides) {
       try {
-        const imported = await importBrandOverridesFromBrowserFile();
-        const saved = saveBrowserBrandOverrides(imported);
-        setBrandOverrides(saved);
-        setBrandDraftOverrides(saved);
-        setBrandStorageMode("browser");
-        updateStatus(`Імпортовано правки брендів у browser-режимі: ${saved.length}`);
+        const imported = await importBrandOverridesFromBrowserFile(settings.brandCategories);
+        if (await saveBrandDrafts(imported.overrides, imported.brandCategories)) updateStatus(`Імпортовано бренди й категорії: ${imported.overrides.length} правок брендів`);
       } catch (error) {
         updateStatus(
           error instanceof Error && error.message === "browser-import-canceled" ? "Імпорт скасовано" : "Не вдалося імпортувати файл правок брендів",
@@ -320,7 +319,7 @@ export function App() {
     }
 
     try {
-      const result = await window.formatterApp.importBrandOverrides();
+      const result = await window.formatterApp.importBrandOverrides(settings.brandCategories);
       if (result.canceled) {
         updateStatus("Імпорт скасовано", "warning");
         return;
@@ -329,6 +328,9 @@ export function App() {
       const imported = sanitizeBrandOverrides(result.overrides);
       setBrandOverrides(imported);
       setBrandDraftOverrides(imported);
+      const categories = normalizeBrandCategories(result.brandCategories ?? settings.brandCategories);
+      setBrandDraftCategories(categories);
+      setSettings((current) => ({ ...current, brandCategories: categories }));
       updateStatus(`Імпортовано правки брендів: ${imported.length}`);
     } catch {
       updateStatus("Не вдалося імпортувати файл правок брендів", "error");
@@ -394,11 +396,11 @@ export function App() {
       }
 
       const backup = normalizeFormatterBackup(backupCandidate);
-      setSettings(backup.settings);
-      setHistory(backup.history);
-      if (!(await saveBrandDrafts(backup.brandOverrides))) {
+      if (!(await saveBrandDrafts(backup.brandOverrides, backup.settings.brandCategories))) {
         return;
       }
+      setSettings(backup.settings);
+      setHistory(backup.history);
       updateStatus("Резервну копію імпортовано");
     } catch (error) {
       const canceled = error instanceof Error && error.message === "browser-import-canceled";
@@ -566,6 +568,7 @@ export function App() {
                 <textarea
                   value={output}
                   onChange={(event) => setOutput(event.target.value)}
+                  onCopy={copyFormattedSelection}
                   spellCheck={false}
                   placeholder="Сформатований текст з'явиться тут..."
                 />
@@ -602,6 +605,7 @@ export function App() {
           brandOverridesCount={previewStats.brandOverridesCount}
           brandDrafts={brandDraftOverrides}
           brandSaved={brandOverrides}
+          brandCategories={brandDraftCategories}
           brandStorageMode={brandStorageMode}
           appInfo={appInfo}
           logCount={previewStats.logCount}
@@ -614,9 +618,11 @@ export function App() {
           onExportBackup={exportBackup}
           onImportBackup={importBackup}
           onBrandChange={setBrandDraftOverrides}
+          onBrandCategoriesChange={setBrandDraftCategories}
           onBrandSave={() => saveBrandDrafts()}
           onBrandRevert={() => {
             setBrandDraftOverrides(brandOverrides);
+            setBrandDraftCategories(settings.brandCategories);
             updateStatus("Незбережені зміни брендів скасовано", "warning");
           }}
           onBrandExport={exportBrandDrafts}
@@ -807,6 +813,7 @@ function SettingsPanel({
   brandOverridesCount,
   brandDrafts,
   brandSaved,
+  brandCategories,
   brandStorageMode,
   appInfo,
   logCount,
@@ -819,6 +826,7 @@ function SettingsPanel({
   onExportBackup,
   onImportBackup,
   onBrandChange,
+  onBrandCategoriesChange,
   onBrandSave,
   onBrandRevert,
   onBrandExport,
@@ -829,6 +837,7 @@ function SettingsPanel({
   brandOverridesCount: number;
   brandDrafts: BrandOverride[];
   brandSaved: BrandOverride[];
+  brandCategories: BrandCategoryDefinition[];
   brandStorageMode: BrandStorageMode;
   appInfo: FormatterAppInfo;
   logCount: number;
@@ -841,6 +850,7 @@ function SettingsPanel({
   onExportBackup: () => void;
   onImportBackup: () => void;
   onBrandChange: (overrides: BrandOverride[]) => void;
+  onBrandCategoriesChange: (categories: BrandCategoryDefinition[]) => void;
   onBrandSave: () => void;
   onBrandRevert: () => void;
   onBrandExport: () => void;
@@ -991,6 +1001,9 @@ function SettingsPanel({
         <BrandEditor
           drafts={brandDrafts}
           saved={brandSaved}
+          categories={brandCategories}
+          savedCategories={settings.brandCategories}
+          onCategoriesChange={onBrandCategoriesChange}
           onChange={onBrandChange}
           onSave={onBrandSave}
           onRevert={onBrandRevert}
@@ -1044,8 +1057,8 @@ function SettingsPanel({
   );
 }
 
-function exportBrandOverridesFromBrowser(overrides: BrandOverride[]) {
-  downloadTextFile("avto-pro-brand-overrides.json", serializeBrandOverrides(overrides));
+function exportBrandOverridesFromBrowser(overrides: BrandOverride[], categories: BrandCategoryDefinition[]) {
+  downloadJsonFile("avto-pro-brand-overrides.json", createBrandLibrary(sanitizeBrandOverrides(overrides), categories));
 }
 
 function downloadJsonFile(fileName: string, value: unknown) {
@@ -1096,7 +1109,7 @@ function importJsonFile(): Promise<unknown> {
   });
 }
 
-function importBrandOverridesFromBrowserFile(): Promise<BrandOverride[]> {
+function importBrandOverridesFromBrowserFile(categories: BrandCategoryDefinition[]): Promise<{ overrides: BrandOverride[]; brandCategories: BrandCategoryDefinition[] }> {
   return new Promise((resolve, reject) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1114,7 +1127,7 @@ function importBrandOverridesFromBrowserFile(): Promise<BrandOverride[]> {
         try {
           const raw = await file.text();
           const parsed = JSON.parse(raw);
-          resolve(sanitizeBrandOverrides(parsed));
+          resolve(parseBrandLibrary(parsed, sanitizeBrandOverrides, categories));
         } catch (error) {
           reject(error instanceof Error ? error : new Error("browser-import-failed"));
         }
@@ -1202,6 +1215,9 @@ function GenericOptions({
 function BrandEditor({
   drafts,
   saved,
+  categories,
+  savedCategories,
+  onCategoriesChange,
   onChange,
   onSave,
   onRevert,
@@ -1211,6 +1227,9 @@ function BrandEditor({
 }: {
   drafts: BrandOverride[];
   saved: BrandOverride[];
+  categories: BrandCategoryDefinition[];
+  savedCategories: BrandCategoryDefinition[];
+  onCategoriesChange: (categories: BrandCategoryDefinition[]) => void;
   onChange: (overrides: BrandOverride[]) => void;
   onSave: () => void;
   onRevert: () => void;
@@ -1221,10 +1240,12 @@ function BrandEditor({
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<BrandQualityCategory | "all">("all");
   const [issueFilter, setIssueFilter] = useState<BrandIssueFilter>("all");
+  const [brandForm, setBrandForm] = useState<(BrandEdit & { entry?: BrandCatalogEntry }) | null>(null);
+  const [brandFormError, setBrandFormError] = useState("");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
 
-  const baseCatalog = useMemo(() => getBrandCatalog(), []);
-  const draftCatalog = useMemo(() => getBrandCatalog(drafts), [drafts]);
-  const hasUnsavedChanges = useMemo(() => JSON.stringify(sanitizeBrandOverrides(drafts)) !== JSON.stringify(sanitizeBrandOverrides(saved)), [drafts, saved]);
+  const draftCatalog = useMemo(() => getBrandCatalog(drafts, categories), [drafts, categories]);
+  const hasUnsavedChanges = useMemo(() => JSON.stringify(sanitizeBrandOverrides(drafts)) !== JSON.stringify(sanitizeBrandOverrides(saved)) || JSON.stringify(categories) !== JSON.stringify(savedCategories), [drafts, saved, categories, savedCategories]);
   const issueStats = useMemo(() => getBrandIssueStats(draftCatalog), [draftCatalog]);
 
   const filteredCatalog = useMemo(() => {
@@ -1258,40 +1279,32 @@ function BrandEditor({
   }, [categoryFilter, draftCatalog, issueFilter, query]);
 
   function upsertBrandOverride(entry: BrandCatalogEntry, patch: Partial<Pick<BrandOverride, "category" | "country">>) {
-    const base = findCatalogEntry(baseCatalog, entry.displayName);
-    const currentOverride = findBrandOverride(drafts, entry.displayName);
-    const category = patch.category ?? entry.category;
-    const country = cleanupInputText(patch.country ?? entry.country);
-    if (!country) {
-      return;
-    }
-
-    const nextOverride: BrandOverride = {
-      displayName: entry.displayName,
-      aliases: currentOverride?.aliases ?? entry.aliases,
-      category,
-      country,
-      isOriginal: category === "original",
-      updatedAt: new Date().toISOString(),
-      source: "user"
-    };
-
-    const withoutCurrent = drafts.filter((override) => normalizeBrandKey(override.displayName) !== normalizeBrandKey(entry.displayName));
-    if (
-      base &&
-      nextOverride.category === base.category &&
-      nextOverride.country === base.country &&
-      nextOverride.isOriginal === base.isOriginal
-    ) {
-      onChange(withoutCurrent);
-      return;
-    }
-
-    onChange([...withoutCurrent, nextOverride]);
+    onChange(updateBrandDraft(drafts, { displayName: entry.displayName, category: entry.category, country: entry.country, ...patch }, entry));
   }
 
   function removeOverride(entry: BrandCatalogEntry) {
-    onChange(drafts.filter((override) => normalizeBrandKey(override.displayName) !== normalizeBrandKey(entry.displayName)));
+    onChange(drafts.filter((override) => getBrandOverrideId(override) !== entry.id));
+    if (brandForm?.entry?.id === entry.id) setBrandForm(null);
+  }
+
+  function submitBrandForm(event: React.FormEvent) {
+    event.preventDefault();
+    if (!brandForm) return;
+    try {
+      onChange(updateBrandDraft(drafts, brandForm, brandForm.entry));
+      setQuery(brandForm.displayName.trim());
+      setCategoryFilter("all");
+      setIssueFilter("all");
+      setBrandForm(null);
+      setBrandFormError("");
+    } catch (error) {
+      setBrandFormError(error instanceof Error ? error.message : "Не вдалося змінити бренд.");
+    }
+  }
+
+  function patchBrandForm(patch: Partial<BrandEdit>) {
+    if (brandForm) setBrandForm({ ...brandForm, ...patch });
+    setBrandFormError("");
   }
 
   return (
@@ -1307,9 +1320,9 @@ function BrandEditor({
           <span>Категорія</span>
           <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as BrandQualityCategory | "all")}>
             <option value="all">Усі категорії</option>
-            {BRAND_CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {BRAND_CATEGORY_LABELS[category]}
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.label}
               </option>
             ))}
           </select>
@@ -1325,11 +1338,19 @@ function BrandEditor({
         </label>
 
         <div className="brand-toolbar-actions">
+          <button type="button" aria-expanded={categoriesOpen} onClick={() => setCategoriesOpen(!categoriesOpen)}><Tags size={18} />Категорії</button>
+          <button type="button" onClick={() => {
+            setBrandForm({ displayName: "", category: "unknown", country: "" });
+            setBrandFormError("");
+          }}>
+            <Plus size={18} />
+            Додати бренд
+          </button>
           <button type="button" className="primary" onClick={onSave}>
             <Save size={18} />
             Зберегти
           </button>
-          <button type="button" onClick={onRevert} disabled={!hasUnsavedChanges}>
+          <button type="button" onClick={() => { onRevert(); setBrandForm(null); setCategoriesOpen(false); setCategoryFilter("all"); }} disabled={!hasUnsavedChanges}>
             <Undo2 size={18} />
             Скасувати
           </button>
@@ -1344,9 +1365,37 @@ function BrandEditor({
         </div>
       </div>
 
+      {categoriesOpen && <CategoryEditor categories={categories} onChange={onCategoriesChange} />}
+
+      {brandForm && (
+        <form className="brand-entry-form" aria-label={brandForm.entry ? "Редагування бренду" : "Новий бренд"} onSubmit={submitBrandForm}>
+          <label>
+            <span>Назва бренду</span>
+            <input autoFocus value={brandForm.displayName} onChange={(event) => patchBrandForm({ displayName: event.target.value })} type="text" />
+          </label>
+          <label>
+            <span>Категорія бренду</span>
+            <select value={brandForm.category} onChange={(event) => patchBrandForm({ category: event.target.value as BrandQualityCategory })}>
+              {categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Країна бренду</span>
+            <input value={brandForm.country} placeholder="Країна не визначена" onChange={(event) => patchBrandForm({ country: event.target.value })} type="text" />
+          </label>
+          <div className="brand-form-actions">
+            <button type="submit" className="primary">{brandForm.entry ? "Застосувати" : "Додати до списку"}</button>
+            <button type="button" onClick={() => { setBrandForm(null); setBrandFormError(""); }}>Закрити</button>
+          </div>
+          <p className="brand-form-hint">Після змін натисніть «Зберегти». {brandForm.entry ? "Попередня назва залишиться для розпізнавання прайсів." : "Власний бренд буде доступний у форматері."}</p>
+          {brandFormError && <p className="brand-form-error" role="alert">{brandFormError}</p>}
+        </form>
+      )}
+
       <div className="brand-summary">
         <span>{filteredCatalog.length} показано</span>
-        <span>{drafts.length} змінено</span>
+        <span>{drafts.length} правок брендів</span>
+        <span>{categories.length} категорій</span>
         <span>Збереження: {storageMode === "electron" ? "Electron" : "Browser"}</span>
         <span>Без країни: {issueStats.missingCountry}</span>
         <span>Без категорії: {issueStats.missingCategory}</span>
@@ -1367,18 +1416,22 @@ function BrandEditor({
           </thead>
           <tbody>
             {filteredCatalog.map((entry) => (
-              <tr key={entry.displayName}>
+              <tr key={entry.id}>
                 <td>
                   <strong>{entry.displayName}</strong>
+                  <button type="button" className="brand-rename-button" aria-label={`Змінити назву ${entry.displayName}`} onClick={() => {
+                    setBrandForm({ entry, displayName: entry.displayName, category: entry.category, country: entry.country });
+                    setBrandFormError("");
+                  }}><Pencil size={14} /> Змінити назву</button>
                 </td>
                 <td>
                   <select
                     value={entry.category}
                     onChange={(event) => upsertBrandOverride(entry, { category: event.target.value as BrandQualityCategory })}
                   >
-                    {BRAND_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {BRAND_CATEGORY_LABELS[category]}
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.label}
                       </option>
                     ))}
                   </select>
@@ -1399,8 +1452,8 @@ function BrandEditor({
                 </td>
                 <td>
                   <button type="button" className="small-button" onClick={() => removeOverride(entry)} disabled={!entry.overridden}>
-                    <RotateCcw size={16} />
-                    База
+                    {entry.baseName ? <RotateCcw size={16} /> : <Trash2 size={16} />}
+                    {entry.baseName ? "База" : "Видалити"}
                   </button>
                 </td>
               </tr>
@@ -1415,16 +1468,6 @@ function BrandEditor({
 function preview(output: string) {
   const firstLines = output.split("\n").filter(Boolean).slice(0, 4).join(" / ");
   return firstLines.length > 180 ? `${firstLines.slice(0, 180)}...` : firstLines;
-}
-
-function findCatalogEntry(entries: BrandCatalogEntry[], displayName: string) {
-  const key = normalizeBrandKey(displayName);
-  return entries.find((entry) => normalizeBrandKey(entry.displayName) === key);
-}
-
-function findBrandOverride(overrides: BrandOverride[], displayName: string) {
-  const key = normalizeBrandKey(displayName);
-  return overrides.find((override) => normalizeBrandKey(override.displayName) === key);
 }
 
 function cleanupInputText(value: string) {
@@ -1475,6 +1518,7 @@ function hasMissingCategory(entry: BrandCatalogEntry) {
 }
 
 function sourceBadgeLabel(entry: BrandCatalogEntry) {
+  if (!entry.baseName && entry.source === "user") return "Власний";
   if (entry.overridden || entry.source === "user") {
     return "Змінено";
   }

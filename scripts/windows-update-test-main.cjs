@@ -27,9 +27,13 @@ function report(value) { fs.writeFileSync(reportPath, JSON.stringify(value, null
   const evaluate = (expression) => window.webContents.executeJavaScript(expression);
   if (process.argv.includes("--update-test-prepare")) {
     await evaluate(`(async () => {
-      localStorage.setItem('formatter.settings.v2', JSON.stringify({schemaVersion:2,settings:{showBrandCountry:false,showBrandCategory:true,darkMode:true}}));
+      const categories = [{id:'premiumReplacement',label:'Test replacement'},{id:'custom:00000000-0000-4000-8000-000000000001',label:'Test custom category'}];
+      localStorage.setItem('formatter.settings.v2', JSON.stringify({schemaVersion:2,settings:{showBrandCountry:false,showBrandCategory:true,darkMode:true,brandCategories:categories}}));
       localStorage.setItem('formatter.history.v1', JSON.stringify([{id:'update-test',createdAt:'2026-10-13T00:00:00.000Z',output:'Saved before update'}]));
-      await window.formatterApp.saveBrandOverrides([{displayName:'CI Brand',country:'Test country',category:'premiumReplacement',source:'user',updatedAt:'2026-10-13T00:00:00.000Z'}]);
+      await window.formatterApp.saveBrandOverrides([
+        {displayName:'CI Brand',country:'Test country',category:'custom:00000000-0000-4000-8000-000000000001',source:'user',updatedAt:'2026-10-13T00:00:00.000Z'},
+        {displayName:'Brembo Italia',baseName:'Brembo',aliases:['Brembo'],country:'Італія',category:'premiumReplacement',source:'user',updatedAt:'2026-11-21T00:00:00.000Z'}
+      ], categories);
     })()`);
     report({ phase: "prepared", userData: app.getPath("userData"), version: app.getVersion() });
     app.quit();
@@ -40,6 +44,9 @@ function report(value) { fs.writeFileSync(reportPath, JSON.stringify(value, null
   assert.equal(saved.settings.showBrandCategory, true);
   assert.equal(saved.history[0].output, "Saved before update");
   assert.equal(saved.brands[0].country, "Test country");
+  assert.equal(saved.brands[1].baseName, "Brembo");
+  assert.equal(saved.brands[0].category, "custom:00000000-0000-4000-8000-000000000001");
+  assert(saved.settings.brandCategories.some(category => category.label === "Test custom category"));
   await evaluate("window.updateTestStates=[]; window.formatterApp.onUpdateState(state=>window.updateTestStates.push(state.status)); void 0;");
   const checked = await evaluate("window.formatterApp.checkForUpdates()");
   assert.equal(checked.status, "available");

@@ -33,7 +33,7 @@ jobs:
       - run: npm ci
       - run: node scripts/release-assets.mjs --check-version
       - run: npm run test
-      - run: npm run smoke:electron
+      - run: npm run smoke:electron -- --clipboard-smoke-test --brand-smoke-test
       - run: npm run dist:mac
       - run: node scripts/release-assets.mjs --platform mac
       - name: Verify signatures and launch the actual Mac installer bundles
@@ -73,7 +73,7 @@ jobs:
       - run: npm ci
       - run: node scripts/release-assets.mjs --check-version
       - run: npm run test
-      - run: npm run smoke:electron
+      - run: npm run smoke:electron -- --clipboard-smoke-test --brand-smoke-test
       - run: npm run dist:win
       - run: node scripts/release-assets.mjs --platform win
       - name: Smoke-test the installed Windows application
@@ -85,12 +85,15 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "NSIS installation failed: $($install.ExitCode)" }
           $stdoutPath = Join-Path $env:RUNNER_TEMP "Formatter-smoke.out"
           $stderrPath = Join-Path $env:RUNNER_TEMP "Formatter-smoke.err"
-          $smoke = Start-Process -FilePath (Join-Path $installDir "Formatter.exe") -ArgumentList "--smoke-test" -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -Wait -PassThru
+          $smoke = Start-Process -FilePath (Join-Path $installDir "Formatter.exe") -ArgumentList @("--smoke-test", "--clipboard-smoke-test", "--brand-smoke-test") -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -Wait -PassThru
           Get-Content $stdoutPath
           Get-Content $stderrPath
           if ($smoke.ExitCode -ne 0 -or -not (Select-String -Path $stdoutPath -Pattern "ELECTRON_SMOKE_PASSED" -Quiet)) {
             throw "Installed Windows smoke test failed: $($smoke.ExitCode)"
           }
+          if (-not (Select-String -Path $stdoutPath -Pattern "CLIPBOARD_SMOKE_PASSED" -Quiet)) { throw "Installed Windows clipboard smoke test did not pass" }
+          if (-not (Select-String -Path $stdoutPath -Pattern "BRAND_EDITOR_SMOKE_PASSED" -Quiet)) { throw "Installed Windows brand editor smoke test did not pass" }
+          if (-not (Select-String -Path $stdoutPath -Pattern "CATEGORY_EDITOR_SMOKE_PASSED" -Quiet)) { throw "Installed Windows category editor smoke test did not pass" }
       - name: Verify a native Windows update and saved data
         run: node scripts/windows-update-smoke.mjs
       - uses: actions/upload-artifact@v4

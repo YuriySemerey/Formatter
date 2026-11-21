@@ -1,7 +1,9 @@
 import avtoProBrandCatalog from "./brandCatalog.generated.json";
 import type { BrandMetadataDisplayOptions } from "./types";
+import { BRAND_CATEGORY_LABELS, getBrandCategoryLabel, isBrandQualityCategory, type BrandCategoryDefinition, type BrandQualityCategory } from "../../electron/brandCategories";
+export { BRAND_CATEGORY_LABELS, isBrandQualityCategory } from "../../electron/brandCategories";
+export type { BrandCategoryDefinition, BrandQualityCategory } from "../../electron/brandCategories";
 
-export type BrandQualityCategory = "original" | "premiumReplacement" | "valueReplacement" | "budgetReplacement" | "unknown";
 
 export type BrandVerificationConfidence = "high" | "medium" | "low";
 
@@ -25,6 +27,7 @@ export interface BrandVerification {
 
 export interface BrandOverride {
   displayName: string;
+  baseName?: string;
   aliases?: string[];
   category: BrandQualityCategory;
   country: string;
@@ -34,6 +37,8 @@ export interface BrandOverride {
 }
 
 export interface BrandCatalogEntry {
+  id: string;
+  baseName?: string;
   displayName: string;
   aliases: string[];
   category: BrandQualityCategory;
@@ -79,14 +84,6 @@ interface GeneratedBrandCatalogEntry {
   verification?: Partial<BrandVerification>;
 }
 
-export const BRAND_CATEGORY_LABELS: Record<BrandQualityCategory, string> = {
-  original: "оригінал",
-  premiumReplacement: "якісний замінник",
-  valueReplacement: "ціна / якість",
-  budgetReplacement: "бюджетний",
-  unknown: "категорія не визначена"
-};
-
 export const UNKNOWN_COUNTRY_LABEL = "країна не визначена";
 const BRAND_VERIFICATION_DATE = "2026-07-13";
 
@@ -110,14 +107,14 @@ const AVTO_PRO_BRAND_INDEX = buildBrandIndex(AVTO_PRO_BRAND_REGISTRY);
 const AVTO_PRO_SOURCE_NAME_INDEX = buildSourceNameIndex(AVTO_PRO_SOURCE_NAMES);
 const AVTO_PRO_BOUNDARY_CANDIDATES = buildBoundaryCandidates(AVTO_PRO_BRAND_REGISTRY);
 
-export function resolveBrandInfo(rawBrand: string, overrides: BrandOverride[] = []): ResolvedBrandInfo {
+export function resolveBrandInfo(rawBrand: string, overrides: BrandOverride[] = [], categories?: BrandCategoryDefinition[]): ResolvedBrandInfo {
   const displayName = cleanupBrand(rawBrand);
   const override = findOverride(displayName, overrides);
   if (override) {
     return {
       displayName: override.displayName,
       category: override.category,
-      categoryLabel: BRAND_CATEGORY_LABELS[override.category],
+      categoryLabel: getBrandCategoryLabel(override.category, categories),
       country: resolveCountry(override.country),
       isOriginal: Boolean(override.isOriginal || override.category === "original"),
       known: true,
@@ -130,7 +127,7 @@ export function resolveBrandInfo(rawBrand: string, overrides: BrandOverride[] = 
     return {
       displayName,
       category: "unknown",
-      categoryLabel: BRAND_CATEGORY_LABELS.unknown,
+      categoryLabel: getBrandCategoryLabel("unknown", categories),
       country: UNKNOWN_COUNTRY_LABEL,
       isOriginal: false,
       known: false,
@@ -141,7 +138,7 @@ export function resolveBrandInfo(rawBrand: string, overrides: BrandOverride[] = 
   return {
     displayName: entry.displayName,
     category: entry.category,
-    categoryLabel: BRAND_CATEGORY_LABELS[entry.category],
+    categoryLabel: getBrandCategoryLabel(entry.category, categories),
     country: resolveCountry(entry.country),
     isOriginal: Boolean(entry.isOriginal || entry.category === "original"),
     known: true,
@@ -151,7 +148,7 @@ export function resolveBrandInfo(rawBrand: string, overrides: BrandOverride[] = 
 }
 
 export function formatBrandMetadata(rawBrand: string, overrides: BrandOverride[] = [], options: BrandMetadataDisplayOptions = {}) {
-  const brand = resolveBrandInfo(rawBrand, overrides);
+  const brand = resolveBrandInfo(rawBrand, overrides, options.brandCategories);
   return [
     options.showBrandCategory !== false ? brand.categoryLabel : "",
     options.showBrandCountry !== false ? brand.country : ""
@@ -192,28 +189,31 @@ export function matchBrandAtTextBoundary(value: string, overrides: BrandOverride
   return undefined;
 }
 
-export function getBrandCatalog(overrides: BrandOverride[] = []): BrandCatalogEntry[] {
+export function getBrandCatalog(overrides: BrandOverride[] = [], categories?: BrandCategoryDefinition[]): BrandCatalogEntry[] {
   const sanitizedOverrides = sanitizeBrandOverrides(overrides);
-  const usedOverrideKeys = new Set<string>();
+  const baseOverrides = new Map(sanitizedOverrides.flatMap((override) => {
+    const base = baseEntryForOverride(override);
+    return base ? [[base.displayName, override] as const] : [];
+  }));
 
   const avtoProEntries = AVTO_PRO_BRAND_REGISTRY.map((entry) => {
-    const override = findOverride(entry.displayName, sanitizedOverrides);
-    if (override) {
-      for (const key of brandKeys(override.displayName, override.aliases)) {
-        usedOverrideKeys.add(key);
-      }
-    }
+    const override = baseOverrides.get(entry.displayName);
 
     const category = override?.category ?? entry.category;
     const country = override ? resolveCountry(override.country) : resolveCountry(entry.country);
     const isOriginal = override?.isOriginal ?? Boolean(entry.isOriginal || category === "original");
-    const aliases = override?.aliases ?? mergeAliases(entry.aliases ?? [], sourceNameAliasesFor(entry.displayName, entry.aliases));
+    const aliases = mergeAliases(
+      entry.aliases, sourceNameAliasesFor(entry.displayName, entry.aliases), override?.aliases,
+      override && override.displayName !== entry.displayName ? [entry.displayName] : []
+    );
 
     return {
-      displayName: entry.displayName,
+      id: `base:${normalizeBrandKey(entry.displayName)}`,
+      baseName: entry.displayName,
+      displayName: override?.displayName ?? entry.displayName,
       aliases,
       category,
-      categoryLabel: BRAND_CATEGORY_LABELS[category],
+      categoryLabel: getBrandCategoryLabel(category, categories),
       country,
       isOriginal,
       source: override ? "user" : "avtoPro",
@@ -223,7 +223,15 @@ export function getBrandCatalog(overrides: BrandOverride[] = []): BrandCatalogEn
     } satisfies BrandCatalogEntry;
   });
 
-  return avtoProEntries;
+  const customEntries = sanitizedOverrides.filter((override) => !baseEntryForOverride(override)).map((override) => ({
+    ...override,
+    id: `user:${normalizeBrandKey(override.displayName)}`,
+    aliases: override.aliases ?? [],
+    categoryLabel: getBrandCategoryLabel(override.category, categories),
+    isOriginal: Boolean(override.isOriginal || override.category === "original"),
+    overridden: true
+  } satisfies BrandCatalogEntry));
+  return [...avtoProEntries, ...customEntries];
 }
 
 export function sanitizeBrandOverrides(value: unknown): BrandOverride[] {
@@ -232,6 +240,7 @@ export function sanitizeBrandOverrides(value: unknown): BrandOverride[] {
   }
 
   const seen = new Set<string>();
+  const seenNames = new Set<string>();
   const sanitized: BrandOverride[] = [];
 
   for (const item of value) {
@@ -251,13 +260,18 @@ export function sanitizeBrandOverrides(value: unknown): BrandOverride[] {
       ? candidate.aliases.map((alias) => cleanupBrand(String(alias))).filter(Boolean)
       : [];
     const key = normalizeBrandKey(displayName);
-    if (!key || seen.has(key) || !AVTO_PRO_BRAND_INDEX.has(key)) {
+    const baseName = typeof candidate.baseName === "string" ? cleanupBrand(candidate.baseName) : "";
+    const base = AVTO_PRO_BRAND_INDEX.get(normalizeBrandKey(baseName || displayName));
+    const identity = base ? `base:${normalizeBrandKey(base.displayName)}` : `user:${key}`;
+    if (!key || seen.has(identity) || seenNames.has(key) || (baseName && !base)) {
       continue;
     }
 
-    seen.add(key);
+    seen.add(identity);
+    seenNames.add(key);
     sanitized.push({
       displayName,
+      ...(baseName && base ? { baseName: base.displayName } : {}),
       aliases,
       category,
       country,
@@ -270,16 +284,6 @@ export function sanitizeBrandOverrides(value: unknown): BrandOverride[] {
   return sanitized;
 }
 
-export function isBrandQualityCategory(value: unknown): value is BrandQualityCategory {
-  return (
-    value === "original" ||
-    value === "premiumReplacement" ||
-    value === "valueReplacement" ||
-    value === "budgetReplacement" ||
-    value === "unknown"
-  );
-}
-
 export function normalizeBrandKey(value: string) {
   return cleanupBrand(value)
     .toLocaleLowerCase("uk")
@@ -287,6 +291,11 @@ export function normalizeBrandKey(value: string) {
     .replace(/\+/gu, "plus")
     .replace(/[^a-zа-яіїєґ0-9]+/giu, "")
     .trim();
+}
+
+export function getBrandOverrideId(override: BrandOverride): string {
+  const base = baseEntryForOverride(override);
+  return base ? `base:${normalizeBrandKey(base.displayName)}` : `user:${normalizeBrandKey(override.displayName)}`;
 }
 
 function normalizeGeneratedBrandCatalog(catalog: GeneratedBrandCatalogFile): BrandRegistryEntry[] {
@@ -404,12 +413,13 @@ function buildBoundaryCandidates(entries: BrandRegistryEntry[]) {
 }
 
 function buildOverrideBoundaryCandidates(overrides: BrandOverride[]) {
-  return overrides.flatMap((override) =>
-    [override.displayName, ...(override.aliases ?? [])].map((matchName) => ({
+  return overrides.flatMap((override) => {
+    const base = baseEntryForOverride(override);
+    return [override.displayName, ...(override.aliases ?? []), ...(base ? [base.displayName, ...(base.aliases ?? [])] : [])].map((matchName) => ({
       displayName: override.displayName,
       matchName
-    }))
-  );
+    }));
+  });
 }
 
 function mergeBoundaryCandidates(...groups: BrandBoundaryCandidate[][]) {
@@ -477,7 +487,15 @@ function mergeAliases(...aliasGroups: Array<string[] | undefined>) {
 
 function findOverride(rawBrand: string, overrides: BrandOverride[]) {
   const normalized = normalizeBrandKey(rawBrand);
-  return sanitizeBrandOverrides(overrides).find((override) => brandKeys(override.displayName, override.aliases).includes(normalized));
+  const base = AVTO_PRO_BRAND_INDEX.get(normalized);
+  return sanitizeBrandOverrides(overrides).find((override) =>
+    brandKeys(override.displayName, override.aliases).includes(normalized) ||
+    (base && baseEntryForOverride(override) === base)
+  );
+}
+
+function baseEntryForOverride(override: BrandOverride) {
+  return AVTO_PRO_BRAND_INDEX.get(normalizeBrandKey(override.baseName || override.displayName));
 }
 
 function resolveCountry(value: unknown) {

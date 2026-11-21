@@ -1,4 +1,5 @@
 import type { AppSettings, GenericFormatOptions, HistoryItem } from "./types";
+import { normalizeBrandCategories } from "../../electron/brandCategories";
 
 type LegacyThemePreferences = {
   productPriceListDarkMode?: boolean;
@@ -44,6 +45,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   loggingEnabled: true,
   showBrandCountry: true,
   showBrandCategory: true,
+  brandCategories: normalizeBrandCategories(undefined),
   genericOptions: DEFAULT_GENERIC_OPTIONS
 };
 
@@ -79,6 +81,7 @@ export function normalizeSettings(value: unknown): AppSettings {
     loggingEnabled: typeof parsed.loggingEnabled === "boolean" ? parsed.loggingEnabled : true,
     showBrandCountry: typeof parsed.showBrandCountry === "boolean" ? parsed.showBrandCountry : true,
     showBrandCategory: typeof parsed.showBrandCategory === "boolean" ? parsed.showBrandCategory : true,
+    brandCategories: normalizeBrandCategories(parsed.brandCategories),
     genericOptions: {
       ...DEFAULT_GENERIC_OPTIONS,
       ...genericOptions
@@ -199,6 +202,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function cloneDefaultSettings(): AppSettings {
   return {
     ...DEFAULT_SETTINGS,
+    brandCategories: normalizeBrandCategories(undefined),
     genericOptions: { ...DEFAULT_GENERIC_OPTIONS }
   };
 }
