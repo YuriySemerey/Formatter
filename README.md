@@ -42,6 +42,7 @@ Settings -> About contains **Check for updates**. Only this user action starts a
 
 - Windows: check, explicitly download, then choose **Restart and update**. Download progress is shown. Nothing installs automatically on exit.
 - macOS: check, download the matching arm64 or x64 DMG, close Formatter and install the new version over the previous one. Mac builds intentionally have no Apple Developer certificate and use manual installation.
+- Mac 0.3.2 and later use verified ad-hoc signatures for the whole app bundle. They are not Apple-notarized: first launch of a downloaded copy can require approval in System Settings -> Privacy & Security -> Open Anyway. Signature integrity and native launch from the actual DMG/ZIP are checked before release.
 - Browser/development and smoke-test runs do not enable update network requests.
 - Missing releases, offline operation, and failed downloads leave formatting available.
 

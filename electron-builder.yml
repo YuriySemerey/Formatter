@@ -24,7 +24,9 @@ publish:
   releaseType: release
 
 mac:
-  identity: null
+  identity: "-"
+  sign: scripts/sign-macos.cjs
+  notarize: false
   category: public.app-category.productivity
   icon: build/icon.icns
   hardenedRuntime: true

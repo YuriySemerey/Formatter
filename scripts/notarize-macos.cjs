@@ -7,6 +7,11 @@ exports.default = async function notarizeMacos(context) {
     return;
   }
 
+  if (context.packager.platformSpecificBuildOptions.identity === "-") {
+    console.log("macOS ad-hoc signing verified; Apple notarization is not enabled in this release mode.");
+    return;
+  }
+
   const appleId = process.env.APPLE_ID;
   const applePassword = process.env.APPLE_APP_SPECIFIC_PASSWORD;
   const appleTeamId = process.env.APPLE_TEAM_ID;

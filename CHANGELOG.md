@@ -2,6 +2,13 @@
 
 All notable changes to Formatter are documented here.
 
+## 0.3.2 - 2026-11-21
+
+- Fixed invalid macOS bundle signatures that caused installed Apple Silicon builds to appear damaged.
+- Ad-hoc sign the application, helpers and frameworks after packaging, with the required Electron entitlements and strict signature verification.
+- Verify both architecture DMG/ZIP bundles and launch the native installed copy in Mac CI before allowing publication.
+- Mac builds remain certificate-free and are not Apple-notarized; first launch can require explicit approval in Privacy & Security.
+
 ## 0.3.1 - 2026-11-10
 
 - Fixed copied Windows cart rows: line breaks and tab-separated cells now keep quantities and subtotals with the correct product.

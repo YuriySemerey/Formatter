@@ -12,6 +12,8 @@ const requiredFiles = [
   "dist-electron/updateService.js",
   "scripts/release-assets.mjs",
   "scripts/publish-release.mjs",
+  "scripts/sign-macos.cjs",
+  "scripts/macos-package-smoke.mjs",
   "scripts/windows-update-smoke.mjs",
   "scripts/windows-update-test-main.cjs",
   "scripts/prepare-nsis.cjs",
@@ -112,7 +114,9 @@ if (config.beforeBuild !== "scripts/prepare-nsis.cjs") fail("Windows builds must
 if (config.publish?.provider !== "github" || config.publish.owner !== "YuriySemerey" || config.publish.repo !== "Formatter" || config.publish.releaseType !== "release") {
   fail("GitHub update provider must target YuriySemerey/Formatter stable releases");
 }
-if (config.mac?.identity !== null) fail("macOS builds must use the agreed unsigned/manual-update mode");
+if (config.mac?.identity !== "-" || config.mac.sign !== "scripts/sign-macos.cjs" || config.mac.notarize !== false) fail("macOS builds must create verified ad-hoc signatures in manual-update mode");
+const entitlements = await readFile(path.join(root, "build/entitlements.mac.plist"), "utf8");
+if (!entitlements.includes("com.apple.security.cs.disable-library-validation")) fail("ad-hoc Electron builds need the standard no-Team-ID library entitlement");
 for (const script of ["pack", "dist:mac", "dist:win"]) {
   if (!packageJson.scripts?.[script]?.includes("--publish never")) fail(`${script} must not publish from local builds`);
 }
@@ -145,6 +149,7 @@ for (const platform of ["MACOS", "WINDOWS"]) {
 if (!buildWorkflow.includes("node scripts/windows-update-smoke.mjs")) {
   fail("Windows CI must verify a native update and persistence between installed versions");
 }
+if (!buildWorkflow.includes("node scripts/macos-package-smoke.mjs")) fail("Mac CI must verify and launch bundles extracted from the distributed DMG and ZIP");
 const compiledUpdates = await readFile(path.join(root, "dist-electron/updateService.js"), "utf8");
 if (!compiledUpdates.includes("YuriySemerey/Formatter") || !compiledUpdates.includes("autoDownload = false") || !compiledUpdates.includes("autoInstallOnAppQuit = false")) {
   fail("compiled update service must use the agreed repository and require user actions");

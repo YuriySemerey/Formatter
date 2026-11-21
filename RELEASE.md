@@ -14,7 +14,7 @@
 
 The release destination is the public `YuriySemerey/Formatter` repository. Its source and installers will be visible publicly. Prepare and review the changes and test results before the owner confirms the first push or publication.
 
-After authorization, push the prepared source to `main` and wait for its successful verification. Create `release/vX.Y.Z` from the previous commit, then fast-forward it to the verified new commit through the connected GitHub tools. This explicit release-branch push starts publication without a terminal, account token or manual workflow launch. The first release branch is `release/v0.3.0`; its version must match package.json, package-lock.json and CHANGELOG.md.
+After authorization, push the prepared source to `main` and wait for its successful verification. Create `release/vX.Y.Z` directly at that verified commit through the connected GitHub tools. Branch creation itself triggers the push workflow; do not first create it at an older version, which would queue an unnecessary failing version check. This starts publication without a terminal, account token or manual workflow launch. The branch version must match package.json, package-lock.json and CHANGELOG.md.
 
 After both platform jobs pass, the publication job creates `vX.Y.Z` at the exact build commit using the workflow's built-in `GITHUB_TOKEN`. The token-created tag does not trigger another run; the same job completes publication. Existing version-tag push publication remains supported. Never reuse a published version or overwrite a tag. An ordinary push to `main` does not publish a release.
 
@@ -66,7 +66,11 @@ Version 0.2.0 cannot discover new releases. The initial 0.3.0 upgrade is manual 
 
 ## Signing
 
-This release deliberately uses unsigned macOS builds (`mac.identity: null`) and manual updates. Do not enable native Mac auto-installation without signing and notarization.
+Mac builds use an explicit ad-hoc identity (`mac.identity: "-"`) with `scripts/sign-macos.cjs`, which supports the pinned electron-builder 26.0.12. It signs nested code and seals the final app resources, then runs strict codesign verification. The standard Electron no-Team-ID entitlements are required for this mode. `identity: null` must not be used: it skips final bundle signing and leaves the Electron executable's original linker signature inconsistent with the packaged app.
+
+These builds have no Developer ID certificate or Apple notarization. Downloaded copies can require the user's first-launch approval in System Settings -> Privacy & Security -> Open Anyway. A valid ad-hoc signature proves bundle integrity, not Apple notarization or automatic Gatekeeper acceptance. Fully trusted distribution requires Developer ID signing and notarization. Manual Mac updates remain in place.
+
+Mac CI verifies strict signatures, version and architecture in both DMGs and ZIPs, copies each DMG's app into a temporary installation directory, and smoke-tests the native architecture's installed and unzipped copies. The JSON report is a separate Actions artifact excluded from release assets. This check must run before publishing; an unpackaged Electron smoke-test alone does not validate the shipped app's signature.
 
 Optional Windows repository secrets:
 

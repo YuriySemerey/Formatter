@@ -36,6 +36,14 @@ jobs:
       - run: npm run smoke:electron
       - run: npm run dist:mac
       - run: node scripts/release-assets.mjs --platform mac
+      - name: Verify signatures and launch the actual Mac installer bundles
+        run: node scripts/macos-package-smoke.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOS-package-test-report
+          path: artifacts/macos-package-test.json
+          if-no-files-found: error
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: Formatter-${{ github.sha }}-macOS
