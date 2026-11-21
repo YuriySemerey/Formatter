@@ -50,6 +50,8 @@ node scripts/release-assets.mjs release/0.3.0 0.3.0 win
 
 Only the publication job has `contents: write`; it uses GitHub's workflow token. No account token belongs in the application or committed files.
 
+Pull requests into `main` run the same installer verification before merge. Their publication job is skipped, and the publisher separately rejects pull-request events before any tag or release write.
+
 ## Upgrade Test
 
 1. Install the previous version.

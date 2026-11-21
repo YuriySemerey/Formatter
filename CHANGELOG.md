@@ -4,6 +4,7 @@ All notable changes to Formatter are documented here.
 
 ## 0.3.3 - 2026-11-21
 
+- Verify installers in pull requests before merge; pull-request events cannot publish tags or releases.
 - Added custom brand categories and editable names for built-in/custom categories; stable IDs preserve all brand assignments when names change.
 - Persist category definitions in settings/backups and include them in brand JSON exports, while accepting legacy arrays and rejecting missing references before import.
 - Verify category creation, duplicate checks, renaming, cancellation, save/reload, formatting switches, backups and installed-platform persistence.

@@ -129,6 +129,7 @@ if (!packageJson.author) {
   fail("package.json must contain author metadata");
 }
 const workflow = load(buildWorkflow);
+if (!workflow.on?.pull_request?.branches?.includes("main")) fail("Pull requests into main must verify installers before merge");
 const publish = workflow.jobs?.publish;
 for (const platform of ["macos", "windows"]) {
   const upload = workflow.jobs?.[platform]?.steps?.find((step) => step.uses?.startsWith("actions/upload-artifact@") && step.with?.name?.startsWith("Formatter-"));
