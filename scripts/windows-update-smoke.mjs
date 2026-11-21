@@ -177,10 +177,17 @@ try {
   assert.equal(saved.settings.darkMode, true);
   assert.equal(saved.history[0].output, "Saved before update");
   assert.equal(saved.brands[0].country, "Test country");
+  assert.equal(saved.brands[1].baseName, "Brembo");
+  assert.equal(saved.brands[1].displayName, "Brembo Italia");
+  assert.equal(saved.brands[0].category, "custom:00000000-0000-4000-8000-000000000001");
+  assert(saved.settings.brandCategories.some(category => category.id === "premiumReplacement" && category.label === "Test replacement"));
+  assert(saved.settings.brandCategories.some(category => category.id === saved.brands[0].category && category.label === "Test custom category"));
   const copiedCart = [
     "Сайлентблок важеля (23145ap)", "Applus", "Сайлентблок важеля (23145ap)", "545 грн", "", "2", "", "1 090 грн",
     "Датчик температури охолоджувальної рідини (32510)", "Febi", "Датчик температури охолоджувальної рідини (32510)", "351 грн", "", "1", "", "351 грн",
-    "Свічка запалювання (OE136/T10)", "Champion", "Свічка запалювання (OE136/T10)", "343 грн", "257 грн", "", "4", "", "1 372 грн", "1 028 грн"
+    "Свічка запалювання (OE136/T10)", "Champion", "Свічка запалювання (OE136/T10)", "343 грн", "257 грн", "", "4", "", "1 372 грн", "1 028 грн",
+    "Оливний фільтр (OF1234)", "CI Brand", "Оливний фільтр (OF1234)", "100 грн",
+    "Гальмівний диск (DF4323)", "Brembo", "Гальмівний диск (DF4323)", "900 грн"
   ].join("\r\n");
   await renderer.evaluate(`(() => {
     const input = document.querySelector('textarea[placeholder="Вставте скопійований прайс-лист..."]');
@@ -203,7 +210,9 @@ try {
     if (clipboardResult) break;
     await pause(100);
   }
-  assert.equal(clipboardResult?.replace(/ - [^\n]+/gu, ""), "Сайлентблок важеля\nApplus — 545 грн / 1 090 грн за 2 шт\n\nДатчик температури охолоджувальної рідини\nFebi — 351 грн\n\nСвічка запалювання\nChampion — 257 грн / 1 028 грн за 4 шт", "Installed Windows renderer must keep quantities, current prices, subtotals and product boundaries");
+  assert.equal(clipboardResult?.replace(/ - [^\n]+/gu, ""), "Сайлентблок важеля\nApplus — 545 грн / 1 090 грн за 2 шт\n\nДатчик температури охолоджувальної рідини\nFebi — 351 грн\n\nСвічка запалювання\nChampion — 257 грн / 1 028 грн за 4 шт\n\nОливний фільтр\nCI Brand — 100 грн\n\nГальмівний диск\nBrembo Italia — 900 грн", "Installed Windows renderer must keep quantities, prices, boundaries and custom/renamed brands after updating");
+  assert(clipboardResult.includes("CI Brand — 100 грн - Test custom category"), "Custom category assignment/name must survive updating");
+  assert(clipboardResult.includes("Brembo Italia — 900 грн - Test replacement"), "Renamed built-in category must survive updating");
   await mkdir("artifacts", { recursive: true });
   await writeFile("artifacts/windows-update-test.json", JSON.stringify({ from: "0.2.99", to: current.version, upgraded, saved, requests, clipboardResult }, null, 2));
   console.log("WINDOWS_UPDATE_SMOKE_PASSED: explicit download, native NSIS upgrade, and persisted settings/history/brands verified");

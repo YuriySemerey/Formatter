@@ -10,9 +10,15 @@ const requiredFiles = [
   "dist-electron/main.js",
   "dist-electron/preload.cjs",
   "dist-electron/updateService.js",
+  "dist-electron/clipboard.js",
+  "dist-electron/clipboardSmoke.js",
+  "dist-electron/brandSmoke.js",
+  "dist-electron/brandCategories.js",
+  "dist-electron/brandLibrary.js",
   "scripts/release-assets.mjs",
   "scripts/publish-release.mjs",
   "scripts/sign-macos.cjs",
+  "scripts/finish-macos-signing.cjs",
   "scripts/macos-package-smoke.mjs",
   "scripts/windows-update-smoke.mjs",
   "scripts/windows-update-test-main.cjs",
@@ -124,6 +130,7 @@ if (!packageJson.author) {
   fail("package.json must contain author metadata");
 }
 const workflow = load(buildWorkflow);
+if (!workflow.on?.pull_request?.branches?.includes("main")) fail("Pull requests into main must verify installers before merge");
 const publish = workflow.jobs?.publish;
 for (const platform of ["macos", "windows"]) {
   const upload = workflow.jobs?.[platform]?.steps?.find((step) => step.uses?.startsWith("actions/upload-artifact@") && step.with?.name?.startsWith("Formatter-"));
@@ -150,6 +157,11 @@ if (!buildWorkflow.includes("node scripts/windows-update-smoke.mjs")) {
   fail("Windows CI must verify a native update and persistence between installed versions");
 }
 if (!buildWorkflow.includes("node scripts/macos-package-smoke.mjs")) fail("Mac CI must verify and launch bundles extracted from the distributed DMG and ZIP");
+for (const platform of ["macos", "windows"]) {
+  if (!workflow.jobs?.[platform]?.steps?.some((step) => step.run === "npm run smoke:electron -- --clipboard-smoke-test --brand-smoke-test")) {
+    fail(`${platform} CI must verify real rich-editor paste and persistent brand editing`);
+  }
+}
 const compiledUpdates = await readFile(path.join(root, "dist-electron/updateService.js"), "utf8");
 if (!compiledUpdates.includes("YuriySemerey/Formatter") || !compiledUpdates.includes("autoDownload = false") || !compiledUpdates.includes("autoInstallOnAppQuit = false")) {
   fail("compiled update service must use the agreed repository and require user actions");

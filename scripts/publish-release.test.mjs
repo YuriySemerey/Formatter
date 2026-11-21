@@ -55,7 +55,7 @@ describe("release branch publication", () => {
   });
 
   it.each([
-    { ref: "refs/heads/main" }, { event: "workflow_dispatch" }, { macos: "failure" }, { windows: "cancelled" },
+    { ref: "refs/heads/main" }, { event: "workflow_dispatch" }, { event: "pull_request", ref: "refs/pull/1/merge" }, { macos: "failure" }, { windows: "cancelled" },
     { ref: "refs/heads/release/v0.3.1" }, { repository: "someone/Formatter" }, { sha: "main" }
   ])("rejects an ineligible publication before any API request: %j", async (override) => {
     const { client } = fixture();

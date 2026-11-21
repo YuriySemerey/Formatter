@@ -14,7 +14,7 @@ import { formatProductPriceList } from "./productPriceList";
 
 const now = "2026-07-12T10:00:00.000Z";
 
-describe("Avto.pro-only brand registry", () => {
+describe("brand registry with an Avto.pro base", () => {
   it("uses generated Avto.pro entries as the only base registry", () => {
     expect(BRAND_REGISTRY).toBe(AVTO_PRO_BRAND_REGISTRY);
     expect(AVTO_PRO_BRAND_REGISTRY).toHaveLength(6521);
@@ -106,7 +106,7 @@ describe("Avto.pro-only brand registry", () => {
 Brembo — 2 306 грн / 4 612 грн за 2 шт - якісний замінник, Італія`);
   });
 
-  it("sanitizes imported override JSON and ignores brands outside Avto.pro", () => {
+  it("sanitizes imported overrides and preserves custom brands", () => {
     expect(
       sanitizeBrandOverrides([
         {
@@ -120,7 +120,8 @@ Brembo — 2 306 грн / 4 612 грн за 2 шт - якісний замінн
         {
           displayName: "New Local Brand",
           category: "budgetReplacement",
-          country: "Україна"
+          country: "Україна",
+          updatedAt: now
         },
         {
           displayName: "Broken",
@@ -137,11 +138,20 @@ Brembo — 2 306 грн / 4 612 грн за 2 шт - якісний замінн
         isOriginal: false,
         updatedAt: now,
         source: "user"
+      },
+      {
+        displayName: "New Local Brand",
+        aliases: [],
+        category: "budgetReplacement",
+        country: "Україна",
+        isOriginal: false,
+        updatedAt: now,
+        source: "user"
       }
     ]);
   });
 
-  it("shows only Avto.pro entries plus user changes in the catalog", () => {
+  it("shows base entries, their changes and custom brands without duplicating base rows", () => {
     const catalog = getBrandCatalog([
       {
         displayName: "Bosch",
@@ -168,7 +178,8 @@ Brembo — 2 306 грн / 4 612 грн за 2 шт - якісний замінн
       overridden: true,
       source: "user"
     });
-    expect(catalog.find((entry) => entry.displayName === "New Local Brand")).toBeUndefined();
+    expect(catalog.find((entry) => entry.displayName === "New Local Brand")).toMatchObject({ source: "user", aliases: ["NLB"], country: "Україна" });
+    expect(catalog).toHaveLength(AVTO_PRO_BRAND_REGISTRY.length + 1);
     expect(catalog.find((entry) => entry.displayName === "Achr")).toMatchObject({ source: "avtoPro" });
   });
 });

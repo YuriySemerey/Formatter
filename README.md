@@ -36,6 +36,30 @@ Settings -> Appearance contains independent **Show country** and **Show category
 
 Country uses the existing brand-country field and user overrides. It is not verified manufacturing-country data for each individual product.
 
+## Custom Brands and Names
+
+Settings -> Brands -> **Додати бренд** adds a custom brand with a name, category and country. Category and country may remain unknown. Use **Змінити назву** beside an existing brand to rename it; this also works for brands from the built-in list. Apply the form, then click **Зберегти**. Changes affect the next Format action.
+
+Renaming keeps the original and previous names available for recognizing copied price lists. Duplicate names, including aliases, are rejected. **База** restores a built-in brand; **Видалити** removes a custom brand from the draft. **Скасувати** reverts drafts to the last saved list. Existing output/history is preserved.
+
+Custom brands and renamed entries persist between launches, in brand JSON exports/imports, and in full backups. Old backups remain supported. The built-in Avto.pro data file is kept intact; saved changes are stored separately.
+
+## Custom Categories
+
+Settings -> Brands -> **Категорії** opens the category editor. Enter a name and click **Додати категорію**, or use **Змінити назву** beside an existing category and apply the new name. All five built-in category names and custom category names are editable. Then click the shared **Зберегти** button. The new category appears in the brand form, brand rows and category filter.
+
+Category assignments keep a stable ID when a name changes, so every assigned brand uses the new name at the next Format action. Existing output/history is preserved. **Скасувати** reverts unsaved brand and category changes together. Empty and duplicate category names are rejected.
+
+Category definitions persist in settings and full backups. Brand JSON exports now include category definitions with the brand records in a versioned `formatter-brand-library` file; importing legacy brand arrays remains supported and preserves the current category names. An import with a missing category definition is rejected before saved data is replaced. Older settings and backups automatically keep the original five category names.
+
+## Copying to HelpCrunch and Other Editors
+
+Use **Copy**, a history entry's copy button, or **Cmd+C / Ctrl+C** on selected text in the result field. Formatter provides both unchanged plain text and escaped HTML with explicit line breaks and spacer lines between groups. Rich-text editors can keep the section separation without inheriting Formatter's font or colors. Paste normally with **Cmd+V / Ctrl+V**; pasting as plain text lets the receiving editor control blank-line handling.
+
+`npm run smoke:electron -- --clipboard-smoke-test` checks actual system-clipboard copying and native paste in a local rich-text field. It restores supported clipboard content afterwards and stops before modifying a clipboard containing unsupported custom formats. The test does not open HelpCrunch or send messages.
+
+Add `--brand-smoke-test` to verify creating, saving, reloading and formatting with custom/renamed brands and categories through the production UI using an isolated test profile.
+
 ## Updates
 
 Settings -> About contains **Check for updates**. Only this user action starts a network check against public releases in [YuriySemerey/Formatter](https://github.com/YuriySemerey/Formatter).

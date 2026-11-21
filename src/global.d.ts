@@ -1,11 +1,13 @@
 import type { UpdateState } from "../electron/updateTypes";
+import type { BrandCategoryDefinition, BrandQualityCategory } from "../electron/brandCategories";
 export {};
 
 declare global {
-  type BrandQualityCategoryName = "original" | "premiumReplacement" | "valueReplacement" | "budgetReplacement" | "unknown";
+  type BrandQualityCategoryName = BrandQualityCategory;
 
   interface BrandOverridePayload {
     displayName: string;
+    baseName?: string;
     aliases?: string[];
     category: BrandQualityCategoryName;
     country: string;
@@ -23,6 +25,7 @@ declare global {
     canceled: boolean;
     filePath?: string;
     overrides: BrandOverridePayload[];
+    brandCategories?: BrandCategoryDefinition[];
   }
 
   interface WindowPinState {
@@ -65,9 +68,9 @@ declare global {
       writeClipboard: (text: string) => Promise<void>;
       setAlwaysOnTop: (enabled: boolean) => Promise<WindowPinState>;
       loadBrandOverrides: () => Promise<BrandOverridePayload[]>;
-      saveBrandOverrides: (overrides: BrandOverridePayload[]) => Promise<BrandOverridePayload[]>;
-      exportBrandOverrides: (overrides: BrandOverridePayload[]) => Promise<BrandOverridesExportResult>;
-      importBrandOverrides: () => Promise<BrandOverridesImportResult>;
+      saveBrandOverrides: (overrides: BrandOverridePayload[], categories?: BrandCategoryDefinition[]) => Promise<BrandOverridePayload[]>;
+      exportBrandOverrides: (overrides: BrandOverridePayload[], categories?: BrandCategoryDefinition[]) => Promise<BrandOverridesExportResult>;
+      importBrandOverrides: (categories?: BrandCategoryDefinition[]) => Promise<BrandOverridesImportResult>;
       getAppInfo: () => Promise<FormatterAppInfo>;
       getUpdateState: () => Promise<UpdateState>;
       checkForUpdates: () => Promise<UpdateState>;

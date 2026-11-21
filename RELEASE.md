@@ -7,7 +7,7 @@
 3. Use Node.js 22 and run `npm ci`.
 4. Run `npm run test`.
 5. Run `npm run build`.
-6. Run `npm run smoke:electron`.
+6. Run `npm run smoke:electron -- --clipboard-smoke-test --brand-smoke-test`.
 7. Run `npm run preflight`.
 
 ## Build and Publish
@@ -50,17 +50,23 @@ node scripts/release-assets.mjs release/0.3.0 0.3.0 win
 
 Only the publication job has `contents: write`; it uses GitHub's workflow token. No account token belongs in the application or committed files.
 
+Pull requests into `main` run the same installer verification before merge. Their publication job is skipped, and the publisher separately rejects pull-request events before any tag or release write.
+
+For certificate-free Mac builds, the final signing hook completes ad-hoc signing when electron-builder skips its signer in a PR, then strictly verifies the bundle. It reuses the configured entitlements and does not enable certificate signing or `CSC_FOR_PULL_REQUEST`.
+
 ## Upgrade Test
 
 1. Install the previous version.
 2. Configure appearance settings, create two history entries, and edit a brand.
 3. Export a full backup from `Settings -> About`.
 4. Install the new build over the previous version.
-5. Verify settings, history, brand edits, clipboard, always-on-top, logs, and formatting.
+5. Verify settings, history, brand edits, clipboard, always-on-top, logs, and formatting. Copy grouped output using Copy, a history entry, and selected output with Cmd+C / Ctrl+C; paste normally into a rich-text editor and check the blank line between groups. Keep prices, quantities, literal `<` / `&` characters and ordinary plain-text paste intact.
 6. Verify that restoring the backup does not populate raw input.
 7. Toggle country and category independently; verify all four combinations and that history remains unchanged until Format.
 8. On Windows, test two installed versions: explicit check, download progress, cancel restart, then restart/install. Test offline and interrupted-download recovery.
 9. On macOS, verify that the download button opens the correct architecture's DMG and that replacing the application preserves user data.
+10. Add a custom brand and rename a built-in entry under Settings -> Brands; save, restart, and format input with both the old and new names. Verify duplicate-name rejection, JSON export/import, full backup restore, Base/Remove and draft cancellation. The stored old output/history must remain unchanged until Format.
+11. Open Categories, add a category, assign it to brands, and rename both custom and built-in categories. Save/restart and verify names in all selectors, filtering and formatted metadata, including all country/category visibility combinations. Export/import the brand library and a full backup; restore legacy arrays/settings/backups. Missing category references must fail before replacing data. Verify that cancelling unsaved edits restores both brands and category names.
 
 Version 0.2.0 cannot discover new releases. The initial 0.3.0 upgrade is manual on both platforms; later Windows builds support in-app installation.
 

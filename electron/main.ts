@@ -5,6 +5,11 @@ import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:f
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync } from "node:fs";
+import { createClipboardContent } from "./clipboard.js";
+import { runClipboardSmoke } from "./clipboardSmoke.js";
+import { runBrandSmoke } from "./brandSmoke.js";
+import { assertBrandCategoryReferences, isBrandQualityCategory, normalizeBrandCategories, validateBrandCategories, type BrandCategoryDefinition, type BrandQualityCategory } from "./brandCategories.js";
+import { createBrandLibrary, parseBrandLibrary } from "./brandLibrary.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,10 +22,9 @@ interface WindowPinState {
   error?: string;
 }
 
-type BrandQualityCategory = "original" | "premiumReplacement" | "valueReplacement" | "budgetReplacement" | "unknown";
-
 interface BrandOverrideRecord {
   displayName: string;
+  baseName?: string;
   aliases?: string[];
   category: BrandQualityCategory;
   country: string;
@@ -58,7 +62,6 @@ const BACKUP_SCHEMA_VERSION = 1;
 const TECHNICAL_LOG_FILE_NAME = "formatter.log";
 const PREVIOUS_TECHNICAL_LOG_FILE_NAME = "formatter.previous.log";
 const MAX_TECHNICAL_LOG_BYTES = 2 * 1024 * 1024;
-const BRAND_CATEGORIES: BrandQualityCategory[] = ["original", "premiumReplacement", "valueReplacement", "budgetReplacement", "unknown"];
 const IS_SMOKE_TEST = process.argv.includes("--smoke-test");
 let mainWindow: BrowserWindow | null = null;
 let logWriteQueue: Promise<void> = Promise.resolve();
@@ -169,7 +172,7 @@ function runSmokeTest(window: BrowserWindow) {
   const timeout = setTimeout(() => {
     console.error("ELECTRON_SMOKE_FAILED: timed out while loading the production renderer");
     app.exit(1);
-  }, 15_000);
+  }, 45_000);
 
   window.webContents.once("did-fail-load", (_event, errorCode, errorDescription) => {
     clearTimeout(timeout);
@@ -207,6 +210,9 @@ function runSmokeTest(window: BrowserWindow) {
 
       const updateState = await window.webContents.executeJavaScript("window.formatterApp.getUpdateState()");
       if (updateState.status !== "unavailable") throw new Error("Smoke test must not enable network updates");
+
+      if (process.argv.includes("--clipboard-smoke-test")) await runClipboardSmoke(window);
+      if (process.argv.includes("--brand-smoke-test")) await runBrandSmoke(window);
 
       clearTimeout(timeout);
       console.log("ELECTRON_SMOKE_PASSED: production renderer and preload IPC are available");
@@ -359,6 +365,7 @@ function validateBrandOverrides(value: unknown): BrandOverrideRecord[] {
   }
 
   const seen = new Set<string>();
+  const seenNames = new Set<string>();
   return value.map((item) => {
     if (!item || typeof item !== "object") {
       throw new Error("brand-override-must-be-object");
@@ -368,20 +375,24 @@ function validateBrandOverrides(value: unknown): BrandOverrideRecord[] {
     const displayName = cleanupText(candidate.displayName);
     const country = cleanupText(candidate.country);
     const category = candidate.category;
+    const baseName = cleanupText(candidate.baseName);
 
-    if (!displayName || !country || !BRAND_CATEGORIES.includes(category as BrandQualityCategory)) {
+    if (!displayName || !country || !isBrandQualityCategory(category)) {
       throw new Error("brand-override-has-invalid-fields");
     }
 
-    const key = normalizeBrandKey(displayName);
-    if (!key || seen.has(key)) {
+    const nameKey = normalizeBrandKey(displayName);
+    const key = normalizeBrandKey(baseName || displayName);
+    if (!key || !nameKey || seen.has(key) || seenNames.has(nameKey)) {
       throw new Error("brand-override-duplicate-brand");
     }
 
     seen.add(key);
+    seenNames.add(nameKey);
 
     return {
       displayName,
+      ...(baseName ? { baseName } : {}),
       aliases: Array.isArray(candidate.aliases) ? candidate.aliases.map(cleanupText).filter(Boolean) : [],
       category: category as BrandQualityCategory,
       country,
@@ -398,13 +409,16 @@ function createBackupFile(value: unknown): AppBackupFile {
   }
 
   const input = value as unknown as AppBackupInput;
+  const settings = validateBackupSettings(input.settings);
+  const brandOverrides = validateBrandOverrides(input.brandOverrides);
+  assertBrandCategoryReferences(brandOverrides, normalizeBrandCategories(settings.brandCategories));
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     createdAt: new Date().toISOString(),
     appVersion: app.getVersion(),
-    settings: validateBackupSettings(input.settings),
+    settings,
     history: validateBackupHistory(input.history),
-    brandOverrides: validateBrandOverrides(input.brandOverrides)
+    brandOverrides
   };
 }
 
@@ -413,13 +427,16 @@ function validateBackupFile(value: unknown): AppBackupFile {
     throw new Error("backup-schema-is-not-supported");
   }
 
+  const settings = validateBackupSettings(value.settings);
+  const brandOverrides = validateBrandOverrides(value.brandOverrides);
+  assertBrandCategoryReferences(brandOverrides, normalizeBrandCategories(settings.brandCategories));
   return {
     schemaVersion: BACKUP_SCHEMA_VERSION,
     createdAt: cleanupText(value.createdAt) || new Date().toISOString(),
     appVersion: cleanupText(value.appVersion) || "unknown",
-    settings: validateBackupSettings(value.settings),
+    settings,
     history: validateBackupHistory(value.history),
-    brandOverrides: validateBrandOverrides(value.brandOverrides)
+    brandOverrides
   };
 }
 
@@ -428,7 +445,7 @@ function validateBackupSettings(value: unknown) {
     throw new Error("backup-settings-must-be-object");
   }
 
-  return value;
+  return value.brandCategories === undefined ? value : { ...value, brandCategories: validateBrandCategories(value.brandCategories) };
 }
 
 function validateBackupHistory(value: unknown): BackupHistoryItem[] {
@@ -599,7 +616,8 @@ app.whenReady().then(() => {
   ipcMain.handle("updates:install", (event) => { validateUpdateSender(event); return updates.install(); });
 
   ipcMain.handle("clipboard:writeText", (_event, text: string) => {
-    clipboard.writeText(text);
+    if (typeof text !== "string") throw new TypeError("Clipboard text must be a string");
+    clipboard.write(createClipboardContent(text));
   });
 
   ipcMain.handle("window:setAlwaysOnTop", (event, enabled: boolean) => {
@@ -622,11 +640,12 @@ app.whenReady().then(() => {
     return readBrandOverrides();
   });
 
-  ipcMain.handle("brands:saveOverrides", async (_event, overrides: unknown) => {
+  ipcMain.handle("brands:saveOverrides", async (_event, overrides: unknown, categories?: BrandCategoryDefinition[]) => {
+    if (categories) assertBrandCategoryReferences(validateBrandOverrides(overrides), validateBrandCategories(categories));
     return writeBrandOverrides(overrides);
   });
 
-  ipcMain.handle("brands:exportOverrides", async (event, overrides: unknown) => {
+  ipcMain.handle("brands:exportOverrides", async (event, overrides: unknown, categories?: BrandCategoryDefinition[]) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender);
     const saveOptions: SaveDialogOptions = {
       title: "Експорт бази правок брендів",
@@ -640,11 +659,12 @@ app.whenReady().then(() => {
     }
 
     const validated = validateBrandOverrides(overrides);
-    await writeTextAtomic(result.filePath, `${JSON.stringify(validated, null, 2)}\n`);
+    const library = createBrandLibrary(validated, normalizeBrandCategories(categories));
+    await writeTextAtomic(result.filePath, `${JSON.stringify(library, null, 2)}\n`);
     return { canceled: false, filePath: result.filePath };
   });
 
-  ipcMain.handle("brands:importOverrides", async (event) => {
+  ipcMain.handle("brands:importOverrides", async (event, categories?: BrandCategoryDefinition[]) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender);
     const openOptions: OpenDialogOptions = {
       title: "Імпорт бази правок брендів",
@@ -659,8 +679,9 @@ app.whenReady().then(() => {
 
     const filePath = result.filePaths[0];
     const raw = await readFile(filePath, "utf8");
-    const overrides = await writeBrandOverrides(JSON.parse(raw));
-    return { canceled: false, filePath, overrides };
+    const library = parseBrandLibrary(JSON.parse(raw), validateBrandOverrides, normalizeBrandCategories(categories));
+    const overrides = await writeBrandOverrides(library.overrides);
+    return { canceled: false, filePath, overrides, brandCategories: library.brandCategories };
   });
 
   ipcMain.handle("app:getInfo", () => ({

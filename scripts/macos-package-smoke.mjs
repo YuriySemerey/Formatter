@@ -27,7 +27,10 @@ async function verify(app, arch, source) {
   assert.equal(version, pkg.version);
   let smokePassed = false;
   if (arch === process.arch) {
-    const smoke = await run(binary, ["--smoke-test"]);
+    const smoke = await run(binary, ["--smoke-test", "--clipboard-smoke-test", "--brand-smoke-test"]);
+    assert(smoke.stdout.includes("CLIPBOARD_SMOKE_PASSED"), `Native clipboard paste did not pass: ${source}`);
+    assert(smoke.stdout.includes("BRAND_EDITOR_SMOKE_PASSED"), `Native brand editor did not pass: ${source}`);
+    assert(smoke.stdout.includes("CATEGORY_EDITOR_SMOKE_PASSED"), `Native category editor did not pass: ${source}`);
     assert(smoke.stdout.includes("ELECTRON_SMOKE_PASSED"), smoke.stderr);
     smokePassed = true;
   }
