@@ -18,6 +18,7 @@ const requiredFiles = [
   "scripts/release-assets.mjs",
   "scripts/publish-release.mjs",
   "scripts/sign-macos.cjs",
+  "scripts/finish-macos-signing.cjs",
   "scripts/macos-package-smoke.mjs",
   "scripts/windows-update-smoke.mjs",
   "scripts/windows-update-test-main.cjs",

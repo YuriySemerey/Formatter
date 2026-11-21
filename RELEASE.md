@@ -52,6 +52,8 @@ Only the publication job has `contents: write`; it uses GitHub's workflow token.
 
 Pull requests into `main` run the same installer verification before merge. Their publication job is skipped, and the publisher separately rejects pull-request events before any tag or release write.
 
+For certificate-free Mac builds, the final signing hook completes ad-hoc signing when electron-builder skips its signer in a PR, then strictly verifies the bundle. It reuses the configured entitlements and does not enable certificate signing or `CSC_FOR_PULL_REQUEST`.
+
 ## Upgrade Test
 
 1. Install the previous version.

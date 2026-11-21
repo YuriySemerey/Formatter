@@ -1,6 +1,7 @@
 const { execFileSync } = require("node:child_process");
 const { rmSync } = require("node:fs");
 const path = require("node:path");
+const { finishAdhocSigning } = require("./finish-macos-signing.cjs");
 
 exports.default = async function notarizeMacos(context) {
   if (process.platform !== "darwin") {
@@ -8,6 +9,7 @@ exports.default = async function notarizeMacos(context) {
   }
 
   if (context.packager.platformSpecificBuildOptions.identity === "-") {
+    await finishAdhocSigning(context);
     console.log("macOS ad-hoc signing verified; Apple notarization is not enabled in this release mode.");
     return;
   }
